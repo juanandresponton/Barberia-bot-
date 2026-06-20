@@ -30,9 +30,11 @@ async function enviarBienvenidaNuevosClientes() {
     const destino = `${cliente.telefono}@c.us`;
     try {
       await sendMessage(destino,
-        `✂️ ¡Hola *${primerNombre(cliente.nombre)}*! Bienvenido a la barbería 💈\n\nYa estás registrado en nuestro sistema. Cuando quieras agendar tu cita escríbenos aquí directamente 🙌`
+        `✂️ ¡Hola *${primerNombre(cliente.nombre)}*! Bienvenido a *Saviac Estilo* 💈\n\nYa estás registrado en nuestro sistema. Cuando quieras agendar tu cita escríbenos aquí directamente 🙌`
       );
-      await new Promise(r => setTimeout(r, 3000));
+      // Pausa aleatoria 5-10 seg para evitar restricción de WhatsApp
+      await new Promise(r => setTimeout(r, 5000 + Math.random() * 5000));
+
       const map = getChatIdMap();
       const lid = map[cliente.telefono.replace(/\D/g, '')];
       if (lid) {
@@ -55,7 +57,7 @@ async function notificarPendientesConHorarios(disponibilidadSemana, clienteState
     if (ambos) {
       clienteState[p.telefono] = { paso: 'eligiendo_dia', nombre: p.nombre };
       await sendMessage(destino,
-        `✂️ ¡Hola *${primerNombre(p.nombre)}*! El barbero confirmó horarios para este fin de semana 💈\n\n¿Qué día te viene mejor?\n\n1) Sábado\n2) Domingo\n\n_Responde con el número de tu opción_`
+        `✂️ ¡Hola *${primerNombre(p.nombre)}*! *Saviac Estilo* confirmó horarios para este fin de semana 💈\n\n¿Qué día te viene mejor?\n\n1) Sábado\n2) Domingo\n\n_Responde con el número de tu opción_`
       );
     } else {
       const fecha     = disponibilidadSemana.sabado ? getFechaProximoDia(6) : getFechaProximoDia(0);
@@ -64,7 +66,7 @@ async function notificarPendientesConHorarios(disponibilidadSemana, clienteState
       const lista     = slots.map((s, i) => `${i + 1}) ${s}`).join('\n');
       clienteState[p.telefono] = { paso: 'eligiendo_hora', dia: disponibilidadSemana.sabado ? 'Sábado' : 'Domingo', fecha, slots, nombre: p.nombre };
       await sendMessage(destino,
-        `✂️ ¡Hola *${primerNombre(p.nombre)}*! El barbero confirmó horarios para este *${diaNombre}* 💈\n\nEstos son los horarios disponibles:\n\n${lista}\n\n¿Cuál te queda mejor?\n\n_Responde con el número de tu opción_`
+        `✂️ ¡Hola *${primerNombre(p.nombre)}*! *Saviac Estilo* confirmó horarios para este *${diaNombre}* 💈\n\nEstos son los horarios disponibles:\n\n${lista}\n\n¿Cuál te queda mejor?\n\n_Responde con el número de tu opción_`
       );
     }
     await new Promise(r => setTimeout(r, 1000));
@@ -79,7 +81,7 @@ async function notificarPendientesNoAbre(clienteState) {
   for (const p of pendientes) {
     const destino = p.from || `${p.telefono}@c.us`;
     await sendMessage(destino,
-      `😔 ¡Hola *${primerNombre(p.nombre)}*! Este fin de semana la barbería estará cerrada.\n\nEl próximo viernes te avisamos. ✂️`
+      `😔 ¡Hola *${primerNombre(p.nombre)}*! Este fin de semana *Saviac Estilo* estará cerrada.\n\nEl próximo viernes te avisamos. ✂️`
     );
     await new Promise(r => setTimeout(r, 1000));
   }
@@ -98,14 +100,13 @@ async function enviarRecordatorioDiaAnterior(clienteState) {
     const cliente = await getClienteByPhone(cita.telefono);
     const destino = cliente?.whatsapp_lid || `${cita.telefono}@c.us`;
     await sendMessage(destino,
-      `✂️ ¡Hola *${primerNombre(cita.nombre)}*! Te recordamos que mañana tienes cita en la barbería a las *${cita.hora}* 💈\n\n1) Sí, confirmo asistencia\n2) Cancelar mi cita\n\n_Responde con el número de tu opción_`
+      `✂️ ¡Hola *${primerNombre(cita.nombre)}*! Te recordamos que mañana tienes cita en *Saviac Estilo* a las *${cita.hora}* 💈\n\n1) Sí, confirmo asistencia\n2) Cancelar mi cita\n\n_Responde con el número de tu opción_`
     );
     clienteState[cita.telefono] = { paso: 'confirmando_cancelacion', citaId: cita.id };
     await new Promise(r => setTimeout(r, 1000));
   }
 }
 
-// ─── RECORDATORIO 15 MIN ANTES ───────────────────────────
 async function enviarRecordatorio15Min(clienteState) {
   const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
   const hoy = `${ahoraColombia.getFullYear()}-${String(ahoraColombia.getMonth()+1).padStart(2,'0')}-${String(ahoraColombia.getDate()).padStart(2,'0')}`;
@@ -129,13 +130,12 @@ async function enviarRecordatorio15Min(clienteState) {
     const ahoraMinutos = ahoraColombia.getHours() * 60 + ahoraColombia.getMinutes();
     const diff         = citaMinutos - ahoraMinutos;
 
-    // Enviar si faltan entre 13 y 17 minutos
     if (diff >= 13 && diff <= 17) {
       const cliente = await getClienteByPhone(cita.telefono);
       const destino = cliente?.whatsapp_lid || `${cita.telefono}@c.us`;
 
       await sendMessage(destino,
-        `⏰ ¡*${primerNombre(cita.nombre)}*! Tu cita para cortarte el pelo es en *15 minutos* ✂️\n\n1) Sí, voy en camino 🚀\n2) No puedo ir, cancelar cita\n\n_Responde con el número de tu opción_`
+        `⏰ ¡*${primerNombre(cita.nombre)}*! Tu cita en *Saviac Estilo* es en *15 minutos* ✂️\n\n1) Sí, voy en camino 🚀\n2) No puedo ir, cancelar cita\n\n_Responde con el número de tu opción_`
       );
 
       await marcarRecordatorioCitaEnviado(cita.rowIndex);
@@ -170,7 +170,7 @@ async function enviarRecordatorioFrecuencia(disponibilidadSemana, clienteState) 
 
     const destino = cliente.whatsapp_lid || `${cliente.telefono}@c.us`;
     await sendMessage(destino,
-      `✂️ ¡Hola *${primerNombre(cliente.nombre)}*! Según tu frecuencia de corte, este fin de semana te toca una visita a la barbería 💈\n\n¿Deseas agendar tu cita?\n\n1) Sí, quiero agendar\n2) No por ahora\n\n_Responde con el número de tu opción_`
+      `✂️ ¡Hola *${primerNombre(cliente.nombre)}*! Según tu frecuencia de corte, este fin de semana te toca una visita a *Saviac Estilo* 💈\n\n¿Deseas agendar tu cita?\n\n1) Sí, quiero agendar\n2) No por ahora\n\n_Responde con el número de tu opción_`
     );
     clienteState[cliente.telefono] = { paso: 'recordatorio_frecuencia', nombre: cliente.nombre };
     await new Promise(r => setTimeout(r, 1000));

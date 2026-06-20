@@ -22,7 +22,7 @@ async function manejarBarbero(from, body, disponibilidadSemana, setDisponibilida
       barberoState[BARBER_PHONE] = { paso: null };
       setDisponibilidad({ abre: false, sabado: false, domingo: false });
       await guardarDisponibilidad({ sabado: false, domingo: false });
-      await sendMessage(from, `🔒 ¡Listo! Les avisaré a los clientes que este fin de semana no hay servicio. Descansa bien 💈`);
+      await sendMessage(from, `🔒 ¡Listo! Les avisaré a los clientes de *Saviac Estilo* que este fin de semana no hay servicio. Descansa bien 💈`);
       await notificarPendientesNoAbre(clienteState);
     } else {
       await sendMessage(from, `⚠️ No entendí.\n\n¿Vas a abrir este *fin de semana*?\n\n1) Sí, voy a abrir\n2) No, este fin descanso\n\n_Responde con el número de tu opción_`);
@@ -51,7 +51,7 @@ async function manejarBarbero(from, body, disponibilidadSemana, setDisponibilida
         barberoState[BARBER_PHONE] = { paso: null };
         setDisponibilidad({ abre: false, sabado: false, domingo: false });
         await guardarDisponibilidad({ sabado: false, domingo: false });
-        await sendMessage(from, `🔒 ¡Entendido! Este fin de semana descansas. Ya les aviso a los clientes 💈`);
+        await sendMessage(from, `🔒 ¡Entendido! Este fin de semana descansas. Ya les aviso a los clientes de *Saviac Estilo* 💈`);
         await notificarPendientesNoAbre(clienteState);
         return;
       }
@@ -63,7 +63,7 @@ async function manejarBarbero(from, body, disponibilidadSemana, setDisponibilida
       let resumen = `✅ ¡Perfecto! Quedó guardado:\n\n`;
       resumen += sabado  ? `📅 *Sábado:* Abierto ✅\n` : `📅 *Sábado:* Cerrado ❌\n`;
       resumen += domingo ? `📅 *Domingo:* Abierto ✅`  : `📅 *Domingo:* Cerrado ❌`;
-      resumen += `\n\n¡Ya les aviso a los clientes! 💈`;
+      resumen += `\n\n¡Ya les aviso a los clientes de *Saviac Estilo*! 💈`;
       await sendMessage(from, resumen);
       await notificarPendientesConHorarios({ abre: true, sabado, domingo }, clienteState);
     } else {
@@ -72,7 +72,7 @@ async function manejarBarbero(from, body, disponibilidadSemana, setDisponibilida
     return;
   }
 
-  await sendMessage(from, `👋 Por ahora no hay nada pendiente. ¡Hasta pronto!`);
+  await sendMessage(from, `👋 Por ahora no hay nada pendiente en *Saviac Estilo*. ¡Hasta pronto!`);
 }
 
 function setBarberoStep(paso) {

@@ -21,7 +21,7 @@ function nombreDia(fecha) {
 async function mostrarMenu(from, nombre) {
   const saludo = primerNombre(nombre) ? `Hola *${primerNombre(nombre)}* 👋` : 'Hola 👋';
   await sendMessage(from,
-    `${saludo}, bienvenido a la barbería ✂️\n\nCon gusto te ayudamos a gestionar tu cita. ¿Qué deseas hacer?\n\n1️⃣ Agendar una cita\n2️⃣ Cancelar mi cita\n3️⃣ Ver mi cita actual\n\n_Responde con el número de tu opción_`
+    `${saludo}, bienvenido a *Saviac Estilo* ✂️\n\nCon gusto te ayudamos a gestionar tu cita. ¿Qué deseas hacer?\n\n1️⃣ Agendar una cita\n2️⃣ Cancelar mi cita\n3️⃣ Ver mi cita actual\n\n_Responde con el número de tu opción_`
   );
 }
 
@@ -62,7 +62,7 @@ async function manejarCliente(from, telefono, body, disponibilidadSemana, msg) {
   if (state.paso === 'recordatorio_frecuencia')       { await manejarRespuestaFrecuencia(from, telefono, body, state); return; }
 
   if (cliente && cliente.estado === 'inactivo') {
-    await sendMessage(from, `😔 Hola *${primerNombre(cliente.nombre)}*! En este momento tu cuenta no está activa.\n\nVisita la barbería para más información. ✂️`);
+    await sendMessage(from, `😔 Hola *${primerNombre(cliente.nombre)}*! En este momento tu cuenta no está activa.\n\nVisita *Saviac Estilo* para más información. ✂️`);
     return;
   }
 
@@ -78,7 +78,7 @@ async function manejarMenu(from, telefono, body, cliente, disponibilidadSemana) 
     clienteState[telefono] = { paso: null, nombre };
 
     if (disponibilidadSemana.abre === false) {
-      await sendMessage(from, `😔 Este fin de semana la barbería estará cerrada.\n\nEl próximo viernes te avisamos. ✂️${VOLVER_MENU}`);
+      await sendMessage(from, `😔 Este fin de semana *Saviac Estilo* estará cerrada.\n\nEl próximo viernes te avisamos. ✂️${VOLVER_MENU}`);
       return;
     }
 
@@ -166,7 +166,7 @@ async function mostrarOpcionesAgendamiento(from, nombre, telefono, disponibilida
 
   if (ambos) {
     clienteState[telefono] = { paso: 'eligiendo_dia', nombre: nombreActual };
-    await sendMessage(from, `✂️ Este fin de semana tenemos disponibilidad 💈\n\n¿Qué día te viene mejor?\n\n1) Sábado\n2) Domingo\n\n_Responde con el número de tu opción_`);
+    await sendMessage(from, `✂️ Este fin de semana tenemos disponibilidad en *Saviac Estilo* 💈\n\n¿Qué día te viene mejor?\n\n1) Sábado\n2) Domingo\n\n_Responde con el número de tu opción_`);
   } else {
     const fecha     = disponibilidadSemana.sabado ? getFechaProximoDia(6) : getFechaProximoDia(0);
     const diaNombre = disponibilidadSemana.sabado ? 'sábado' : 'domingo';
@@ -179,7 +179,7 @@ async function mostrarOpcionesAgendamiento(from, nombre, telefono, disponibilida
 
     clienteState[telefono] = { paso: 'eligiendo_hora', dia: disponibilidadSemana.sabado ? 'Sábado' : 'Domingo', fecha, slots, nombre: nombreActual };
     const lista = slots.map((s, i) => `${i + 1}) ${s}`).join('\n');
-    await sendMessage(from, `✂️ Este fin de semana abrimos el *${diaNombre}* 💈\n\nEstos son los horarios disponibles:\n\n${lista}\n\n_Responde con el número de tu opción_`);
+    await sendMessage(from, `✂️ Este fin de semana *Saviac Estilo* abre el *${diaNombre}* 💈\n\nEstos son los horarios disponibles:\n\n${lista}\n\n_Responde con el número de tu opción_`);
   }
 }
 
@@ -239,7 +239,7 @@ async function manejarEligiendoHora(from, telefono, body, state) {
 
   clienteState[telefono] = { paso: 'confirmando_cancelacion', citaId, nombre };
   await sendMessage(from,
-    `🎉 ¡Listo *${primerNombre(nombre)}*! Tu cita quedó agendada.\n\n📅 *Día:* ${state.dia}\n⏰ *Hora:* ${hora}\n\n¡Te esperamos! 💈\n\nSi deseas cancelar:\n1) Cancelar mi cita\n2) Volver al menú\n\n_Responde con el número de tu opción_`
+    `🎉 ¡Listo *${primerNombre(nombre)}*! Tu cita en *Saviac Estilo* quedó agendada.\n\n📅 *Día:* ${state.dia}\n⏰ *Hora:* ${hora}\n\n¡Te esperamos! 💈\n\nSi deseas cancelar:\n1) Cancelar mi cita\n2) Volver al menú\n\n_Responde con el número de tu opción_`
   );
   console.log(`✅ Cita agendada: ${nombre} | ${state.fecha} | ${hora}`);
 }
@@ -249,7 +249,7 @@ async function manejarNombreNuevo(from, telefono, body, disponibilidadSemana) {
   clienteState[telefono] = { paso: null, nombre };
 
   if (disponibilidadSemana.abre === false) {
-    await sendMessage(from, `😔 ¡Hola *${primerNombre(nombre)}*! Este fin de semana la barbería estará cerrada.\n\nEl próximo viernes te avisamos. ✂️${VOLVER_MENU}`);
+    await sendMessage(from, `😔 ¡Hola *${primerNombre(nombre)}*! Este fin de semana *Saviac Estilo* estará cerrada.\n\nEl próximo viernes te avisamos. ✂️${VOLVER_MENU}`);
     return;
   }
   if (disponibilidadSemana.abre === true) { await mostrarOpcionesAgendamiento(from, nombre, telefono, disponibilidadSemana); return; }
@@ -300,7 +300,7 @@ async function manejarConfirmacionFinalCancelacion(from, telefono, body, state) 
         await borrarCliente(cliente.rowIndex);
         clienteState[telefono] = { paso: null };
         await sendMessage(from,
-          `😔 Tu cita fue cancelada.\n\nDebido a cancelaciones repetidas tu registro ha sido *eliminado* de nuestra base de datos.\n\nSi deseas volver, regístrate nuevamente escaneando nuestro QR en la barbería. ✂️`
+          `😔 Tu cita fue cancelada.\n\nDebido a cancelaciones repetidas tu registro ha sido *eliminado* de la base de datos de *Saviac Estilo*.\n\nSi deseas volver, regístrate nuevamente escaneando nuestro QR en la barbería. ✂️`
         );
         return;
       }
@@ -329,17 +329,15 @@ async function manejarConfirmacionFinalCancelacion(from, telefono, body, state) 
   }
 }
 
-// ─── RESPUESTA RECORDATORIO 15 MIN ───────────────────────
 async function manejarRespuestaRecordatorio(from, telefono, body, state) {
   const cliente = await getClienteByPhone(telefono);
   const citas   = await getCitas();
   const cita    = citas.find(c => c.id === state.citaId);
 
   if (body === '1') {
-    // ✅ Va en camino
     clienteState[telefono] = { paso: null };
     await sendMessage(from,
-      `✅ ¡Perfecto *${primerNombre(cliente?.nombre)}*! Te esperamos en la barbería. Hasta pronto ✂️${VOLVER_MENU}`
+      `✅ ¡Perfecto *${primerNombre(cliente?.nombre)}*! Te esperamos en *Saviac Estilo*. Hasta pronto ✂️${VOLVER_MENU}`
     );
     if (cliente && cita) {
       await updateEstadoCita(cita.rowIndex, 'asistio');
@@ -348,7 +346,6 @@ async function manejarRespuestaRecordatorio(from, telefono, body, state) {
     }
 
   } else if (body === '2') {
-    // ❌ Cancela
     if (cita) {
       await updateEstadoCita(cita.rowIndex, 'cancelada');
       if (cita.event_id) await cancelarCita(cita.event_id);
@@ -361,7 +358,7 @@ async function manejarRespuestaRecordatorio(from, telefono, body, state) {
         await borrarCliente(cliente.rowIndex);
         clienteState[telefono] = { paso: null };
         await sendMessage(from,
-          `😔 Tu cita fue cancelada.\n\nDebido a cancelaciones repetidas tu registro ha sido *eliminado* de nuestra base de datos.\n\nSi deseas volver, regístrate nuevamente escaneando nuestro QR en la barbería. ✂️`
+          `😔 Tu cita fue cancelada.\n\nDebido a cancelaciones repetidas tu registro ha sido *eliminado* de la base de datos de *Saviac Estilo*.\n\nSi deseas volver, regístrate nuevamente escaneando nuestro QR en la barbería. ✂️`
         );
         return;
       }
@@ -388,7 +385,6 @@ async function manejarRespuestaRecordatorio(from, telefono, body, state) {
   }
 }
 
-// ─── RESPUESTA RECORDATORIO FRECUENCIA ───────────────────
 async function manejarRespuestaFrecuencia(from, telefono, body, state) {
   const cliente = await getClienteByPhone(telefono);
 
@@ -404,7 +400,7 @@ async function manejarRespuestaFrecuencia(from, telefono, body, state) {
         await borrarCliente(cliente.rowIndex);
         clienteState[telefono] = { paso: null };
         await sendMessage(from,
-          `😔 Entendido.\n\nDebido a cancelaciones repetidas tu registro ha sido *eliminado* de nuestra base de datos.\n\nSi deseas volver, regístrate nuevamente escaneando nuestro QR en la barbería. ✂️`
+          `😔 Entendido.\n\nDebido a cancelaciones repetidas tu registro ha sido *eliminado* de la base de datos de *Saviac Estilo*.\n\nSi deseas volver, regístrate nuevamente escaneando nuestro QR en la barbería. ✂️`
         );
         return;
       }
