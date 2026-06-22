@@ -122,7 +122,7 @@ async function preguntarDisponibilidad() {
   setBarberoStep('abre');
   const destino = BARBER_LID || `${BARBER_PHONE}@c.us`;
   await sendMessage(destino,
-    `✂️ ¡Hola! ¿Vas a abrir la barbería este *fin de semana*?\n\n1) Sí, voy a abrir\n2) No, este fin descanso\n\n_Responde con el número de tu opción_`
+    `✂️ ¡Hola! ¿Vas a abrir *Saviac Estilo* este *fin de semana*?\n\n1) Sí, voy a abrir\n2) No, este fin descanso\n\n_Responde con el número de tu opción_`
   );
 }
 
@@ -136,51 +136,51 @@ function resetDisponibilidad() {
 let whatsappListo = false;
 client.on('ready', () => { whatsappListo = true; console.log('✅ WhatsApp listo'); });
 
-// Disponibilidad — cada minuto PRUEBA | PROD: '0 18 * * 4'
-cron.schedule('* * * * *', async () => {
-  if (!whatsappListo) { console.log('⏳ WhatsApp no listo...'); return; }
+// Disponibilidad — PROD: jueves 6PM
+cron.schedule('0 18 * * 4', async () => {
+  if (!whatsappListo) return;
   console.log('⏰ Cron disponibilidad...');
   await preguntarDisponibilidad();
 }, { timezone: 'America/Bogota', runOnInit: false });
 
-// Bienvenida nuevos clientes — cada minuto PRUEBA | PROD: '*/30 * * * *'
-cron.schedule('* * * * *', async () => {
+// Bienvenida nuevos clientes — PROD: cada 30 min
+cron.schedule('*/30 * * * *', async () => {
   if (!whatsappListo) return;
   await enviarBienvenidaNuevosClientes();
 }, { timezone: 'America/Bogota', runOnInit: false });
 
-// Recordatorio día anterior | PROD: '0 20 * * *'
+// Recordatorio día anterior — PROD: 8PM todos los días
 cron.schedule('0 20 * * *', async () => {
   if (!whatsappListo) return;
   console.log('⏰ Cron recordatorio día anterior...');
   await enviarRecordatorioDiaAnterior(clienteState);
 }, { timezone: 'America/Bogota', runOnInit: false });
 
-// Recordatorio 15 min — cada minuto PRUEBA | PROD: '* * * * *'
+// Recordatorio 15 min — PROD: cada minuto
 cron.schedule('* * * * *', async () => {
   if (!whatsappListo) return;
   await enviarRecordatorio15Min(clienteState);
 }, { timezone: 'America/Bogota', runOnInit: false });
 
-// Recordatorio frecuencia — cada minuto PRUEBA | PROD: '0 10 * * 5'
-cron.schedule('* * * * *', async () => {
+// Recordatorio frecuencia — PROD: viernes 10AM
+cron.schedule('0 10 * * 5', async () => {
   if (!whatsappListo) return;
   console.log('⏰ Cron recordatorio frecuencia...');
   await enviarRecordatorioFrecuencia(disponibilidadSemana, clienteState);
 }, { timezone: 'America/Bogota', runOnInit: false });
 
-// Marcar no asistidos | PROD: '0 0 * * *'
+// Marcar no asistidos — PROD: medianoche todos los días
 cron.schedule('0 0 * * *', async () => {
   if (!whatsappListo) return;
   console.log('⏰ Cron marcar no asistidos...');
   await marcarNoAsistidos();
 }, { timezone: 'America/Bogota', runOnInit: false });
 
-// Reset disponibilidad | PROD: '0 0 * * 1'
+// Reset disponibilidad — PROD: lunes medianoche
 cron.schedule('0 0 * * 1', async () => {
   if (!whatsappListo) return;
   resetDisponibilidad();
 }, { timezone: 'America/Bogota', runOnInit: false });
 
 client.initialize();
-console.log('🚀 Bot de barbería iniciado...');
+console.log('🚀 Saviac Estilo Bot iniciado...');
