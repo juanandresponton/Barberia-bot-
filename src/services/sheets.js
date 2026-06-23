@@ -30,11 +30,12 @@ function normalizarTelefono(telefono) {
   return num;
 }
 
+// ─── CLIENTES ────────────────────────────────────────────
 async function getClientes() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${HOJAS.clientes}!A2:J`
+    range: `${HOJAS.clientes}!A2:K`
   });
 
   const rows = res.data.values || [];
@@ -42,17 +43,18 @@ async function getClientes() {
     .map((row, index) => ({ ...row, _rowIndex: index + 2 }))
     .filter(row => row[2])
     .map(row => ({
-      rowIndex:             row._rowIndex,
-      marca_temporal:       row[0] || '',
-      nombre:               row[1] || '',
-      telefono:             normalizarTelefono(row[2] || ''),
-      tipo_corte:           row[3] || '',
-      frecuencia:           row[4] || '',
-      ultimo_corte:         row[5] || '',
-      proximo_recordatorio: row[6] || '',
-      estado:               row[7] || 'activo',
-      veces_cancelo:        row[8] || '0',
-      whatsapp_lid:         row[9] || ''
+      rowIndex:                row._rowIndex,
+      marca_temporal:          row[0] || '',
+      nombre:                  row[1] || '',
+      telefono:                normalizarTelefono(row[2] || ''),
+      tipo_corte:              row[3] || '',
+      frecuencia:              row[4] || '',
+      ultimo_corte:            row[5] || '',
+      proximo_recordatorio:    row[6] || '',
+      estado:                  row[7] || 'activo',
+      veces_cancelo:           row[8] || '0',
+      whatsapp_lid:            row[9] || '',
+      citas_canceladas_admin:  row[10] || '0'
     }));
 }
 
@@ -65,7 +67,6 @@ async function getClienteByPhone(telefono) {
     const telSheet     = normalizarTelefono(c.telefono);
     const telSheetBase = String(c.telefono).replace(/\D/g, '');
     const lidEnSheet   = String(c.whatsapp_lid || '').replace('@lid', '').replace('@c.us', '');
-
     return (
       telSheet     === telefonoNorm ||
       telSheetBase === soloNumeros  ||
@@ -96,7 +97,6 @@ async function actualizarUltimoCorte(rowIndex, frecuencia) {
   const proximo = new Date(hoy);
   const dias   = parseInt(String(frecuencia).replace(/\D/g, '')) || 15;
   proximo.setDate(hoy.getDate() + dias);
-
   await updateCliente(rowIndex, 'F', hoy.toISOString().split('T')[0]);
   await updateCliente(rowIndex, 'G', proximo.toISOString().split('T')[0]);
   await updateCliente(rowIndex, 'H', 'activo');
@@ -112,7 +112,7 @@ async function setProximoRecordatorio8Dias(rowIndex) {
   const fecha = new Date();
   fecha.setDate(fecha.getDate() + 8);
   await updateCliente(rowIndex, 'G', fecha.toISOString().split('T')[0]);
-  console.log(`📅 Próximo recordatorio en 8 días: ${fecha.toISOString().split('T')[0]}`);
+  console.log(`📅 Próximo recordatorio en 8 días`);
 }
 
 async function marcarClienteInactivo(rowIndex) {
@@ -124,7 +124,7 @@ async function borrarCliente(rowIndex) {
   const sheets = await getSheetsClient();
   await sheets.spreadsheets.values.clear({
     spreadsheetId: SHEET_ID,
-    range: `${HOJAS.clientes}!A${rowIndex}:J${rowIndex}`
+    range: `${HOJAS.clientes}!A${rowIndex}:K${rowIndex}`
   });
   console.log(`🗑️ Cliente borrado de fila ${rowIndex}`);
 }
@@ -135,73 +135,79 @@ async function sumarCancelacion(rowIndex, vecesCancelo) {
   return nuevo;
 }
 
+// ─── SUMAR CANCELACION POR ADMIN (columna K) ─────────────
+async function sumarCitasCanceladasAdmin(rowIndex, vecesActual) {
+  const nuevo = parseInt(vecesActual || 0) + 1;
+  await updateCliente(rowIndex, 'K', String(nuevo));
+  console.log(`📊 Citas canceladas por admin: ${nuevo}`);
+}
+
 async function sumarNoAsistio(rowIndex) {
   console.log(`⚠️ sumarNoAsistio: no hay columna disponible`);
 }
 
+// ─── DISPONIBILIDAD ──────────────────────────────────────
 async function getDisponibilidad() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${HOJAS.disponibilidad}!A2:D`
+    range: `${HOJAS.disponibilidad}!A2:E`
   });
-
   const rows = res.data.values || [];
   if (rows.length === 0) return null;
-
   const last = rows[rows.length - 1];
   return {
     fecha:       last[0] || '',
-    sabado:      last[1] === 'TRUE',
-    domingo:     last[2] === 'TRUE',
-    actualizado: last[3] || ''
+    viernes:     last[1] === 'TRUE',
+    sabado:      last[2] === 'TRUE',
+    domingo:     last[3] === 'TRUE',
+    actualizado: last[4] || ''
   };
 }
 
-async function guardarDisponibilidad({ sabado, domingo }) {
+async function guardarDisponibilidad({ viernes = false, sabado, domingo }) {
   const sheets = await getSheetsClient();
   const fecha  = new Date().toISOString().split('T')[0];
-
   await sheets.spreadsheets.values.append({
     spreadsheetId: SHEET_ID,
-    range: `${HOJAS.disponibilidad}!A:D`,
+    range: `${HOJAS.disponibilidad}!A:E`,
     valueInputOption: 'RAW',
     requestBody: {
       values: [[
         fecha,
+        viernes ? 'TRUE' : 'FALSE',
         sabado  ? 'TRUE' : 'FALSE',
         domingo ? 'TRUE' : 'FALSE',
         new Date().toISOString()
       ]]
     }
   });
-
-  console.log(`✅ Disponibilidad guardada: sábado=${sabado} domingo=${domingo}`);
+  console.log(`✅ Disponibilidad guardada: viernes=${viernes} sábado=${sabado} domingo=${domingo}`);
 }
 
-// ─── LEER CITAS — con columna recordatorio_enviado ───────
+// ─── CITAS ───────────────────────────────────────────────
 async function getCitas() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${HOJAS.citas}!A2:I`
+    range: `${HOJAS.citas}!A2:J`
   });
-
   const rows = res.data.values || [];
   return rows
     .map((row, index) => ({ ...row, _rowIndex: index + 2 }))
     .filter(row => row[0])
     .map(row => ({
-      rowIndex:             row._rowIndex,
-      id:                   row[0] || '',
-      telefono:             row[1] || '',
-      nombre:               row[2] || '',
-      fecha:                row[3] || '',
-      hora:                 row[4] || '',
-      estado:               row[5] || '',
-      creado:               row[6] || '',
-      event_id:             row[7] || '',
-      recordatorio_enviado: row[8] || ''
+      rowIndex:              row._rowIndex,
+      id:                    row[0] || '',
+      telefono:              row[1] || '',
+      nombre:                row[2] || '',
+      fecha:                 row[3] || '',
+      hora:                  row[4] || '',
+      estado:                row[5] || '',
+      creado:                row[6] || '',
+      event_id:              row[7] || '',
+      recordatorio_enviado:  row[8] || '',
+      cancelada_por_admin:   row[9] || ''
     }));
 }
 
@@ -209,19 +215,17 @@ async function agregarCita({ telefono, nombre, fecha, hora, eventId }) {
   const sheets  = await getSheetsClient();
   const citas   = await getCitas();
   const nuevoId = String(citas.length + 1).padStart(3, '0');
-
   await sheets.spreadsheets.values.append({
     spreadsheetId: SHEET_ID,
-    range: `${HOJAS.citas}!A:I`,
+    range: `${HOJAS.citas}!A:J`,
     valueInputOption: 'RAW',
     requestBody: {
       values: [[
         nuevoId, telefono, nombre, fecha, hora,
-        'confirmada', new Date().toISOString(), eventId || '', ''
+        'confirmada', new Date().toISOString(), eventId || '', '', ''
       ]]
     }
   });
-
   console.log(`✅ Cita agregada: ${nombre} | ${fecha} | ${hora} | ID: ${nuevoId}`);
   return nuevoId;
 }
@@ -236,7 +240,6 @@ async function updateEstadoCita(rowIndex, estado) {
   });
 }
 
-// ─── MARCAR RECORDATORIO ENVIADO EN CITAS ────────────────
 async function marcarRecordatorioCitaEnviado(rowIndex) {
   const sheets = await getSheetsClient();
   await sheets.spreadsheets.values.update({
@@ -248,13 +251,25 @@ async function marcarRecordatorioCitaEnviado(rowIndex) {
   console.log(`✅ Recordatorio marcado enviado en fila ${rowIndex}`);
 }
 
+// ─── MARCAR CANCELADA POR ADMIN (columna J de citas) ─────
+async function marcarCitaCanceladaAdmin(rowIndex) {
+  const sheets = await getSheetsClient();
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: `${HOJAS.citas}!J${rowIndex}`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [['TRUE']] }
+  });
+  console.log(`✅ Cita marcada como cancelada por admin en fila ${rowIndex}`);
+}
+
+// ─── PENDIENTES ──────────────────────────────────────────
 async function getPendientes() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
     range: `${HOJAS.pendientes}!A2:D`
   });
-
   const rows = res.data.values || [];
   return rows
     .map((row, index) => ({ ...row, _rowIndex: index + 2 }))
@@ -272,7 +287,6 @@ async function agregarPendienteSheet({ telefono, nombre, from }) {
   const pendientes = await getPendientes();
   const yaExiste   = pendientes.find(p => p.telefono === telefono);
   if (yaExiste) { console.log(`⏭️ Pendiente ya existe: ${nombre} (${telefono})`); return; }
-
   const sheets = await getSheetsClient();
   await sheets.spreadsheets.values.append({
     spreadsheetId: SHEET_ID,
@@ -280,7 +294,6 @@ async function agregarPendienteSheet({ telefono, nombre, from }) {
     valueInputOption: 'RAW',
     requestBody: { values: [[telefono, nombre, from, new Date().toISOString()]] }
   });
-
   console.log(`📋 Pendiente guardado: ${nombre} (${telefono})`);
 }
 
@@ -304,6 +317,7 @@ module.exports = {
   marcarClienteInactivo,
   borrarCliente,
   sumarCancelacion,
+  sumarCitasCanceladasAdmin,
   sumarNoAsistio,
   getDisponibilidad,
   guardarDisponibilidad,
@@ -311,6 +325,7 @@ module.exports = {
   getCitas,
   updateEstadoCita,
   marcarRecordatorioCitaEnviado,
+  marcarCitaCanceladaAdmin,
   getPendientes,
   agregarPendienteSheet,
   limpiarPendientes,

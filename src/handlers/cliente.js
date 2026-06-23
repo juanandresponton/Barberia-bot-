@@ -39,9 +39,7 @@ async function manejarCliente(from, telefono, body, disponibilidadSemana, msg) {
           const corto = normalizarTelefono(contact.number.slice(-10));
           cliente = await getClienteByPhone(corto);
           if (cliente) telefono = corto;
-        } else {
-          telefono = numReal;
-        }
+        } else { telefono = numReal; }
         if (cliente) console.log(`✅ Cliente encontrado por getContact: ${cliente.nombre}`);
       }
     } catch (e) { console.log(`⚠️ getContact falló: ${e.message}`); }
@@ -49,7 +47,6 @@ async function manejarCliente(from, telefono, body, disponibilidadSemana, msg) {
 
   if (from.includes('@lid') && cliente && !cliente.whatsapp_lid) {
     await guardarLid(cliente.rowIndex, from);
-    console.log(`💾 LID guardado para ${cliente.nombre}`);
   }
 
   if (state.paso === 'menu')                          { await manejarMenu(from, telefono, body, cliente, disponibilidadSemana); return; }
@@ -60,6 +57,7 @@ async function manejarCliente(from, telefono, body, disponibilidadSemana, msg) {
   if (state.paso === 'confirmando_cancelacion_final') { await manejarConfirmacionFinalCancelacion(from, telefono, body, state); return; }
   if (state.paso === 'recordatorio_15min')            { await manejarRespuestaRecordatorio(from, telefono, body, state); return; }
   if (state.paso === 'recordatorio_frecuencia')       { await manejarRespuestaFrecuencia(from, telefono, body, state); return; }
+  if (state.paso === 'reagendando_por_admin')         { await manejarReagendadoPorAdmin(from, telefono, body, state); return; }
 
   if (cliente && cliente.estado === 'inactivo') {
     await sendMessage(from, `😔 Hola *${primerNombre(cliente.nombre)}*! En este momento tu cuenta no está activa.\n\nVisita *Saviac Estilo* para más información. ✂️`);
@@ -78,17 +76,18 @@ async function manejarMenu(from, telefono, body, cliente, disponibilidadSemana) 
     clienteState[telefono] = { paso: null, nombre };
 
     if (disponibilidadSemana.abre === false) {
-      await sendMessage(from, `😔 Este fin de semana *Saviac Estilo* estará cerrada.\n\nEl próximo viernes te avisamos. ✂️${VOLVER_MENU}`);
+      await sendMessage(from, `😔 Este fin de semana *Saviac Estilo* estará cerrada.\n\nEl próximo jueves te avisamos. ✂️${VOLVER_MENU}`);
       return;
     }
 
     if (disponibilidadSemana.abre === true) {
       const citas        = await getCitas();
+      const fechaViernes = getFechaProximoDia(5);
       const fechaSabado  = getFechaProximoDia(6);
       const fechaDomingo = getFechaProximoDia(0);
       const tieneCita    = citas.find(c =>
         c.telefono === telefono &&
-        (c.fecha === fechaSabado || c.fecha === fechaDomingo) &&
+        (c.fecha === fechaViernes || c.fecha === fechaSabado || c.fecha === fechaDomingo) &&
         c.estado === 'confirmada'
       );
 
@@ -113,11 +112,12 @@ async function manejarMenu(from, telefono, body, cliente, disponibilidadSemana) 
 
   if (body === '2') {
     const citas        = await getCitas();
+    const fechaViernes = getFechaProximoDia(5);
     const fechaSabado  = getFechaProximoDia(6);
     const fechaDomingo = getFechaProximoDia(0);
     const citaActiva   = citas.find(c =>
       c.telefono === telefono &&
-      (c.fecha === fechaSabado || c.fecha === fechaDomingo) &&
+      (c.fecha === fechaViernes || c.fecha === fechaSabado || c.fecha === fechaDomingo) &&
       c.estado === 'confirmada'
     );
 
@@ -136,11 +136,12 @@ async function manejarMenu(from, telefono, body, cliente, disponibilidadSemana) 
 
   if (body === '3') {
     const citas        = await getCitas();
+    const fechaViernes = getFechaProximoDia(5);
     const fechaSabado  = getFechaProximoDia(6);
     const fechaDomingo = getFechaProximoDia(0);
     const citaActiva   = citas.find(c =>
       c.telefono === telefono &&
-      (c.fecha === fechaSabado || c.fecha === fechaDomingo) &&
+      (c.fecha === fechaViernes || c.fecha === fechaSabado || c.fecha === fechaDomingo) &&
       c.estado === 'confirmada'
     );
 
@@ -162,44 +163,40 @@ async function manejarMenu(from, telefono, body, cliente, disponibilidadSemana) 
 
 async function mostrarOpcionesAgendamiento(from, nombre, telefono, disponibilidadSemana) {
   const nombreActual = clienteState[telefono]?.nombre || nombre;
-  const ambos        = disponibilidadSemana.sabado && disponibilidadSemana.domingo;
-
-  if (ambos) {
-    clienteState[telefono] = { paso: 'eligiendo_dia', nombre: nombreActual };
-    await sendMessage(from, `✂️ Este fin de semana tenemos disponibilidad en *Saviac Estilo* 💈\n\n¿Qué día te viene mejor?\n\n1) Sábado\n2) Domingo\n\n_Responde con el número de tu opción_`);
-  } else {
-    const fecha     = disponibilidadSemana.sabado ? getFechaProximoDia(6) : getFechaProximoDia(0);
-    const diaNombre = disponibilidadSemana.sabado ? 'sábado' : 'domingo';
-    const slots     = await getSlotsDisponibles(fecha);
-
-    if (slots.length === 0) {
-      await sendMessage(from, `😔 Lo sentimos, ya no hay horarios disponibles para este fin de semana.\n\nEl próximo viernes te avisamos. ✂️${VOLVER_MENU}`);
-      return;
-    }
-
-    clienteState[telefono] = { paso: 'eligiendo_hora', dia: disponibilidadSemana.sabado ? 'Sábado' : 'Domingo', fecha, slots, nombre: nombreActual };
-    const lista = slots.map((s, i) => `${i + 1}) ${s}`).join('\n');
-    await sendMessage(from, `✂️ Este fin de semana *Saviac Estilo* abre el *${diaNombre}* 💈\n\nEstos son los horarios disponibles:\n\n${lista}\n\n_Responde con el número de tu opción_`);
-  }
-}
-
-async function manejarEligiendoDia(from, telefono, body, state, disponibilidadSemana) {
-  const soloDia = disponibilidadSemana.sabado !== disponibilidadSemana.domingo;
-  if (body === '2' && soloDia) {
-    const cliente = await getClienteByPhone(telefono);
-    if (cliente) { const nf = new Date(); nf.setDate(nf.getDate() + 8); await updateCliente(cliente.rowIndex, 'G', nf.toISOString().split('T')[0]); }
-    clienteState[telefono] = { paso: null };
-    await sendMessage(from, `👍 ¡Sin problema! Te recordaremos en 8 días. ✂️${VOLVER_MENU}`);
-    return;
-  }
-
   const dias = [];
+  if (disponibilidadSemana.viernes) dias.push({ label: 'Viernes', fecha: getFechaProximoDia(5) });
   if (disponibilidadSemana.sabado)  dias.push({ label: 'Sábado',  fecha: getFechaProximoDia(6) });
   if (disponibilidadSemana.domingo) dias.push({ label: 'Domingo', fecha: getFechaProximoDia(0) });
 
-  const idx = parseInt(body) - 1;
+  if (dias.length === 0) {
+    await sendMessage(from, `😔 Lo sentimos, ya no hay días disponibles para este fin de semana.\n\nEl próximo jueves te avisamos. ✂️${VOLVER_MENU}`);
+    return;
+  }
+
+  if (dias.length === 1) {
+    const slots = await getSlotsDisponibles(dias[0].fecha);
+    if (slots.length === 0) {
+      await sendMessage(from, `😔 Lo sentimos, ya no hay horarios disponibles.\n\nEl próximo jueves te avisamos. ✂️${VOLVER_MENU}`);
+      return;
+    }
+    clienteState[telefono] = { paso: 'eligiendo_hora', dia: dias[0].label, fecha: dias[0].fecha, slots, nombre: nombreActual };
+    const lista = slots.map((s, i) => `${i + 1}) ${s}`).join('\n');
+    await sendMessage(from, `✂️ Este fin de semana *Saviac Estilo* abre el *${dias[0].label.toLowerCase()}* 💈\n\nEstos son los horarios disponibles:\n\n${lista}\n\n_Responde con el número de tu opción_`);
+    return;
+  }
+
+  const opciones = dias.map((d, i) => `${i+1}) ${d.label}`).join('\n');
+  clienteState[telefono] = { paso: 'eligiendo_dia', dias, nombre: nombreActual };
+  await sendMessage(from, `✂️ Este fin de semana tenemos disponibilidad en *Saviac Estilo* 💈\n\n¿Qué día te viene mejor?\n\n${opciones}\n\n_Responde con el número de tu opción_`);
+}
+
+async function manejarEligiendoDia(from, telefono, body, state, disponibilidadSemana) {
+  const dias = state.dias || [];
+  const idx  = parseInt(body) - 1;
+
   if (isNaN(idx) || !dias[idx]) {
-    await sendMessage(from, `⚠️ Opción no válida. Responde con *1*${dias.length > 1 ? ' para Sábado o *2* para Domingo' : ''}.`);
+    const opciones = dias.map((d, i) => `${i+1}) ${d.label}`).join('\n');
+    await sendMessage(from, `⚠️ Opción no válida.\n\n${opciones}`);
     return;
   }
 
@@ -207,17 +204,19 @@ async function manejarEligiendoDia(from, telefono, body, state, disponibilidadSe
   const slots      = await getSlotsDisponibles(diaElegido.fecha);
 
   if (slots.length === 0) {
-    if (diaElegido.label === 'Sábado' && disponibilidadSemana.domingo) {
-      const slotsDomingo = await getSlotsDisponibles(getFechaProximoDia(0));
-      if (slotsDomingo.length > 0) {
-        clienteState[telefono] = { paso: 'eligiendo_hora', dia: 'Domingo', fecha: getFechaProximoDia(0), slots: slotsDomingo, nombre: state.nombre };
-        const lista = slotsDomingo.map((s, i) => `${i + 1}) ${s}`).join('\n');
-        await sendMessage(from, `😔 Lo sentimos, ya no hay horarios para el *sábado*.\n\n¡Pero el *domingo* sí tenemos espacio! 💈\n\nEstos son los horarios disponibles:\n\n${lista}\n\n_Responde con el número de tu opción_`);
+    // Intentar con otros días disponibles
+    const otrosDias = dias.filter((_, i) => i !== idx);
+    if (otrosDias.length > 0) {
+      const slotsOtro = await getSlotsDisponibles(otrosDias[0].fecha);
+      if (slotsOtro.length > 0) {
+        clienteState[telefono] = { paso: 'eligiendo_hora', dia: otrosDias[0].label, fecha: otrosDias[0].fecha, slots: slotsOtro, nombre: state.nombre };
+        const lista = slotsOtro.map((s, i) => `${i + 1}) ${s}`).join('\n');
+        await sendMessage(from, `😔 Lo sentimos, ya no hay horarios para el *${diaElegido.label.toLowerCase()}*.\n\n¡Pero el *${otrosDias[0].label.toLowerCase()}* sí tenemos espacio! 💈\n\n${lista}\n\n_Responde con el número de tu opción_`);
         return;
       }
     }
     clienteState[telefono] = { paso: null };
-    await sendMessage(from, `😔 Lo sentimos, ya no hay horarios disponibles.\n\nEl próximo viernes te avisamos. ✂️${VOLVER_MENU}`);
+    await sendMessage(from, `😔 Lo sentimos, ya no hay horarios disponibles.\n\nEl próximo jueves te avisamos. ✂️${VOLVER_MENU}`);
     return;
   }
 
@@ -249,7 +248,7 @@ async function manejarNombreNuevo(from, telefono, body, disponibilidadSemana) {
   clienteState[telefono] = { paso: null, nombre };
 
   if (disponibilidadSemana.abre === false) {
-    await sendMessage(from, `😔 ¡Hola *${primerNombre(nombre)}*! Este fin de semana *Saviac Estilo* estará cerrada.\n\nEl próximo viernes te avisamos. ✂️${VOLVER_MENU}`);
+    await sendMessage(from, `😔 ¡Hola *${primerNombre(nombre)}*! Este fin de semana *Saviac Estilo* estará cerrada.\n\nEl próximo jueves te avisamos. ✂️${VOLVER_MENU}`);
     return;
   }
   if (disponibilidadSemana.abre === true) { await mostrarOpcionesAgendamiento(from, nombre, telefono, disponibilidadSemana); return; }
@@ -290,30 +289,22 @@ async function manejarConfirmacionFinalCancelacion(from, telefono, body, state) 
     if (cita) {
       await updateEstadoCita(cita.rowIndex, 'cancelada');
       if (cita.event_id) await cancelarCita(cita.event_id);
-      console.log(`🗑️ Cita cancelada: ${cita.nombre} | ${cita.fecha} | ${cita.hora}`);
     }
 
     if (cliente) {
       const nuevasCancelaciones = await sumarCancelacion(cliente.rowIndex, cliente.veces_cancelo);
-
       if (nuevasCancelaciones >= 3) {
         await borrarCliente(cliente.rowIndex);
         clienteState[telefono] = { paso: null };
-        await sendMessage(from,
-          `😔 Tu cita fue cancelada.\n\nDebido a cancelaciones repetidas tu registro ha sido *eliminado* de la base de datos de *Saviac Estilo*.\n\nSi deseas volver, regístrate nuevamente escaneando nuestro QR en la barbería. ✂️`
-        );
+        await sendMessage(from, `😔 Tu cita fue cancelada.\n\nDebido a cancelaciones repetidas tu registro ha sido *eliminado* de la base de datos de *Saviac Estilo*.\n\nSi deseas volver, regístrate nuevamente. ✂️`);
         return;
       }
-
       if (nuevasCancelaciones === 2) {
         await setProximoRecordatorio8Dias(cliente.rowIndex);
         clienteState[telefono] = { paso: null };
-        await sendMessage(from,
-          `😔 Tu cita fue cancelada.\n\n⚠️ *Atención:* Esta es tu segunda cancelación. Si cancelas una vez más, tu registro será eliminado.\n\nTe recordaremos en 8 días. ✂️${VOLVER_MENU}`
-        );
+        await sendMessage(from, `😔 Tu cita fue cancelada.\n\n⚠️ *Atención:* Esta es tu segunda cancelación. Si cancelas una vez más, tu registro será eliminado.\n\nTe recordaremos en 8 días. ✂️${VOLVER_MENU}`);
         return;
       }
-
       await setProximoRecordatorio8Dias(cliente.rowIndex);
     }
 
@@ -336,52 +327,34 @@ async function manejarRespuestaRecordatorio(from, telefono, body, state) {
 
   if (body === '1') {
     clienteState[telefono] = { paso: null };
-    await sendMessage(from,
-      `✅ ¡Perfecto *${primerNombre(cliente?.nombre)}*! Te esperamos en *Saviac Estilo*. Hasta pronto ✂️${VOLVER_MENU}`
-    );
+    await sendMessage(from, `✅ ¡Perfecto *${primerNombre(cliente?.nombre)}*! Te esperamos en *Saviac Estilo*. Hasta pronto ✂️${VOLVER_MENU}`);
     if (cliente && cita) {
       await updateEstadoCita(cita.rowIndex, 'asistio');
       await resetearCancelaciones(cliente.rowIndex);
       if (cliente.frecuencia) await actualizarUltimoCorte(cliente.rowIndex, cliente.frecuencia);
     }
-
   } else if (body === '2') {
-    if (cita) {
-      await updateEstadoCita(cita.rowIndex, 'cancelada');
-      if (cita.event_id) await cancelarCita(cita.event_id);
-    }
-
+    if (cita) { await updateEstadoCita(cita.rowIndex, 'cancelada'); if (cita.event_id) await cancelarCita(cita.event_id); }
     if (cliente) {
       const nuevasCancelaciones = await sumarCancelacion(cliente.rowIndex, cliente.veces_cancelo);
-
       if (nuevasCancelaciones >= 3) {
         await borrarCliente(cliente.rowIndex);
         clienteState[telefono] = { paso: null };
-        await sendMessage(from,
-          `😔 Tu cita fue cancelada.\n\nDebido a cancelaciones repetidas tu registro ha sido *eliminado* de la base de datos de *Saviac Estilo*.\n\nSi deseas volver, regístrate nuevamente escaneando nuestro QR en la barbería. ✂️`
-        );
+        await sendMessage(from, `😔 Tu cita fue cancelada.\n\nDebido a cancelaciones repetidas tu registro ha sido *eliminado* de la base de datos de *Saviac Estilo*.\n\nSi deseas volver, regístrate nuevamente. ✂️`);
         return;
       }
-
       if (nuevasCancelaciones === 2) {
         await setProximoRecordatorio8Dias(cliente.rowIndex);
         clienteState[telefono] = { paso: null };
-        await sendMessage(from,
-          `😔 Cita cancelada.\n\n⚠️ *Atención:* Esta es tu segunda cancelación. Si cancelas una vez más, tu registro será eliminado.\n\nTe recordaremos en 8 días. ✂️${VOLVER_MENU}`
-        );
+        await sendMessage(from, `😔 Cita cancelada.\n\n⚠️ *Atención:* Esta es tu segunda cancelación. Si cancelas una vez más, tu registro será eliminado.\n\nTe recordaremos en 8 días. ✂️${VOLVER_MENU}`);
         return;
       }
-
       await setProximoRecordatorio8Dias(cliente.rowIndex);
     }
-
     clienteState[telefono] = { paso: null };
     await sendMessage(from, `😔 Cita cancelada. Te recordaremos en 8 días. ✂️${VOLVER_MENU}`);
-
   } else {
-    await sendMessage(from,
-      `⚠️ Por favor responde:\n\n1) Sí, voy en camino 🚀\n2) No puedo ir, cancelar cita\n\n_Responde con el número de tu opción_`
-    );
+    await sendMessage(from, `⚠️ Por favor responde:\n\n1) Sí, voy en camino 🚀\n2) No puedo ir, cancelar cita`);
   }
 }
 
@@ -391,40 +364,61 @@ async function manejarRespuestaFrecuencia(from, telefono, body, state) {
   if (body === '1') {
     clienteState[telefono] = { paso: 'menu', nombre: state.nombre };
     await mostrarMenu(from, state.nombre);
-
   } else if (body === '2') {
     if (cliente) {
       const nuevasCancelaciones = await sumarCancelacion(cliente.rowIndex, cliente.veces_cancelo);
-
       if (nuevasCancelaciones >= 3) {
         await borrarCliente(cliente.rowIndex);
         clienteState[telefono] = { paso: null };
-        await sendMessage(from,
-          `😔 Entendido.\n\nDebido a cancelaciones repetidas tu registro ha sido *eliminado* de la base de datos de *Saviac Estilo*.\n\nSi deseas volver, regístrate nuevamente escaneando nuestro QR en la barbería. ✂️`
-        );
+        await sendMessage(from, `😔 Entendido.\n\nDebido a cancelaciones repetidas tu registro ha sido *eliminado* de la base de datos de *Saviac Estilo*.\n\nSi deseas volver, regístrate nuevamente. ✂️`);
         return;
       }
-
       if (nuevasCancelaciones === 2) {
         await setProximoRecordatorio8Dias(cliente.rowIndex);
         clienteState[telefono] = { paso: null };
-        await sendMessage(from,
-          `😔 Entendido.\n\n⚠️ *Atención:* Esta es tu segunda cancelación. Si la próxima vez tampoco asistes, tu registro será eliminado.\n\nTe recordaremos en 8 días. ✂️`
-        );
+        await sendMessage(from, `😔 Entendido.\n\n⚠️ *Atención:* Esta es tu segunda cancelación. Si la próxima vez tampoco asistes, tu registro será eliminado.\n\nTe recordaremos en 8 días. ✂️`);
         return;
       }
-
       await setProximoRecordatorio8Dias(cliente.rowIndex);
     }
-
     clienteState[telefono] = { paso: null };
     await sendMessage(from, `😔 Entendido. Te recordaremos en 8 días. ✂️`);
-
   } else {
-    await sendMessage(from,
-      `⚠️ Por favor responde:\n\n1) Sí, quiero agendar\n2) No por ahora\n\n_Responde con el número de tu opción_`
-    );
+    await sendMessage(from, `⚠️ Por favor responde:\n\n1) Sí, quiero agendar\n2) No por ahora`);
   }
+}
+
+// ─── REAGENDAR POR ADMIN ─────────────────────────────────
+async function manejarReagendadoPorAdmin(from, telefono, body, state) {
+  const { diasAlternativos } = state;
+  const idx = parseInt(body) - 1;
+  const opcionEsperar = diasAlternativos.length; // última opción = esperar
+
+  if (body === String(opcionEsperar + 1)) {
+    // Esperar próximo fin de semana
+    clienteState[telefono] = { paso: null };
+    await sendMessage(from, `✅ Perfecto, te contactaremos el próximo jueves para reagendar tu cita en *Saviac Estilo*. ✂️`);
+    return;
+  }
+
+  if (isNaN(idx) || !diasAlternativos[idx]) {
+    const opciones = diasAlternativos.map((d, i) => `${i+1}) ${d.label}`).join('\n');
+    await sendMessage(from, `⚠️ Opción no válida.\n\n${opciones}\n${opcionEsperar + 1}) Esperar al próximo fin de semana`);
+    return;
+  }
+
+  const diaElegido = diasAlternativos[idx];
+  const slots      = await getSlotsDisponibles(diaElegido.fecha);
+
+  if (slots.length === 0) {
+    clienteState[telefono] = { paso: null };
+    await sendMessage(from, `😔 Lo sentimos, ya no hay horarios disponibles para el ${diaElegido.label}.\n\nTe contactaremos el próximo jueves. ✂️`);
+    return;
+  }
+
+  const lista = slots.map((s, i) => `${i + 1}) ${s}`).join('\n');
+  clienteState[telefono] = { paso: 'eligiendo_hora', dia: diaElegido.label, fecha: diaElegido.fecha, slots, nombre: state.nombre };
+  await sendMessage(from, `📅 Estos son los horarios disponibles para el *${diaElegido.label}*:\n\n${lista}\n\n_Responde con el número de tu opción_`);
 }
 
 module.exports = { manejarCliente, clienteState };
