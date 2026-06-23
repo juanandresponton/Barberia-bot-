@@ -121,9 +121,10 @@ async function preguntarDisponibilidad() {
 
   setBarberoStep('abre');
   const destino = BARBER_LID || `${BARBER_PHONE}@c.us`;
+  
   await sendMessage(destino,
-    `✂️ ¡Hola! ¿Vas a abrir *Saviac Estilo* este *fin de semana*?\n\n1) Sí, voy a abrir\n2) No, este fin descanso\n\n_Responde con el número de tu opción_`
-  );
+  `✂️ ¡Hola! ¿Vas a abrir *Saviac Estilo* este *fin de semana*?\n\n1) Sí, voy a abrir\n2) No, este fin descanso\n\n_Responde con el número de tu opción_`
+);
 }
 
 function resetDisponibilidad() {
