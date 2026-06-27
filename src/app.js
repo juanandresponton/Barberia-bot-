@@ -138,7 +138,7 @@ let whatsappListo = false;
 client.on('ready', () => { whatsappListo = true; console.log('✅ WhatsApp listo'); });
 
 // Disponibilidad — PROD: jueves 6PM
-cron.schedule('20 21 * * 4', async () => {
+cron.schedule('35 21 * * 5', async () => {
   if (!whatsappListo) return;
   console.log('⏰ Cron disponibilidad...');
   await preguntarDisponibilidad();
