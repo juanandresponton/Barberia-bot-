@@ -15,7 +15,10 @@ const HOJAS = {
   clientes:       'clientes',
   disponibilidad: 'disponibilidad',
   citas:          'citas',
-  pendientes:     'pendientes'
+  pendientes:     'pendientes',
+  profesionales:  'profesionales',
+  servicios:      'servicios',
+  productos:      'productos'
 };
 
 async function getSheetsClient() {
@@ -35,7 +38,7 @@ async function getClientes() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${HOJAS.clientes}!A2:K`
+    range: `${HOJAS.clientes}!A2:M`
   });
 
   const rows = res.data.values || [];
@@ -54,7 +57,9 @@ async function getClientes() {
       estado:                  row[7] || 'activo',
       veces_cancelo:           row[8] || '0',
       whatsapp_lid:            row[9] || '',
-      citas_canceladas_admin:  row[10] || '0'
+      citas_canceladas_admin:  row[10] || '0',
+      profesional_origen:      row[11] || '',
+      profesional_preferido:   row[12] || ''
     }));
 }
 
@@ -92,6 +97,16 @@ async function guardarLid(rowIndex, lid) {
   console.log(`💾 LID guardado en fila ${rowIndex}: ${lid}`);
 }
 
+async function guardarProfesionalOrigen(rowIndex, profesionalId) {
+  await updateCliente(rowIndex, 'L', profesionalId);
+  console.log(`💾 Profesional origen guardado: ${profesionalId}`);
+}
+
+async function guardarProfesionalPreferido(rowIndex, profesionalId) {
+  await updateCliente(rowIndex, 'M', profesionalId);
+  console.log(`💾 Profesional preferido guardado: ${profesionalId}`);
+}
+
 async function actualizarUltimoCorte(rowIndex, frecuencia) {
   const hoy    = new Date();
   const proximo = new Date(hoy);
@@ -124,7 +139,7 @@ async function borrarCliente(rowIndex) {
   const sheets = await getSheetsClient();
   await sheets.spreadsheets.values.clear({
     spreadsheetId: SHEET_ID,
-    range: `${HOJAS.clientes}!A${rowIndex}:K${rowIndex}`
+    range: `${HOJAS.clientes}!A${rowIndex}:M${rowIndex}`
   });
   console.log(`🗑️ Cliente borrado de fila ${rowIndex}`);
 }
@@ -135,7 +150,6 @@ async function sumarCancelacion(rowIndex, vecesCancelo) {
   return nuevo;
 }
 
-// ─── SUMAR CANCELACION POR ADMIN (columna K) ─────────────
 async function sumarCitasCanceladasAdmin(rowIndex, vecesActual) {
   const nuevo = parseInt(vecesActual || 0) + 1;
   await updateCliente(rowIndex, 'K', String(nuevo));
@@ -144,6 +158,97 @@ async function sumarCitasCanceladasAdmin(rowIndex, vecesActual) {
 
 async function sumarNoAsistio(rowIndex) {
   console.log(`⚠️ sumarNoAsistio: no hay columna disponible`);
+}
+
+// ─── PROFESIONALES ───────────────────────────────────────
+async function getProfesionales() {
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${HOJAS.profesionales}!A2:E`
+  });
+  const rows = res.data.values || [];
+  return rows
+    .map((row, index) => ({ ...row, _rowIndex: index + 2 }))
+    .filter(row => row[0])
+    .map(row => ({
+      rowIndex:    row._rowIndex,
+      id:          row[0] || '',
+      nombre:      row[1] || '',
+      tipo:        row[2] || '',
+      estado:      row[3] || 'activo',
+      calendar_id: row[4] || ''
+    }));
+}
+
+async function getProfesionalById(id) {
+  const profesionales = await getProfesionales();
+  return profesionales.find(p => p.id === id) || null;
+}
+
+async function getProfesionalesByTipo(tipo) {
+  const profesionales = await getProfesionales();
+  return profesionales.filter(p => p.tipo === tipo && p.estado === 'activo');
+}
+
+// ─── SERVICIOS ───────────────────────────────────────────
+async function getServicios() {
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${HOJAS.servicios}!A2:G`
+  });
+  const rows = res.data.values || [];
+  return rows
+    .map((row, index) => ({ ...row, _rowIndex: index + 2 }))
+    .filter(row => row[0])
+    .map(row => ({
+      rowIndex:      row._rowIndex,
+      id:            row[0] || '',
+      nombre:        row[1] || '',
+      categoria:     row[2] || '',
+      duracion_min:  parseInt(row[3] || '45'),
+      precio:        parseInt(row[4] || '0'),
+      profesionales: row[5] || '',
+      activo:        row[6] !== 'FALSE'
+    }));
+}
+
+async function getServicioById(id) {
+  const servicios = await getServicios();
+  return servicios.find(s => s.id === id) || null;
+}
+
+async function getServiciosByCategoria(categoria) {
+  const servicios = await getServicios();
+  return servicios.filter(s => s.categoria === categoria && s.activo);
+}
+
+// ─── PRODUCTOS ───────────────────────────────────────────
+async function getProductos() {
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${HOJAS.productos}!A2:F`
+  });
+  const rows = res.data.values || [];
+  return rows
+    .map((row, index) => ({ ...row, _rowIndex: index + 2 }))
+    .filter(row => row[0])
+    .map(row => ({
+      rowIndex:    row._rowIndex,
+      id:          row[0] || '',
+      nombre:      row[1] || '',
+      categoria:   row[2] || '',
+      precio:      parseInt(row[3] || '0'),
+      descripcion: row[4] || '',
+      activo:      row[5] !== 'FALSE'
+    }));
+}
+
+async function getProductosByCategoria(categoria) {
+  const productos = await getProductos();
+  return productos.filter(p => p.categoria === categoria && p.activo);
 }
 
 // ─── DISPONIBILIDAD ──────────────────────────────────────
@@ -190,7 +295,7 @@ async function getCitas() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${HOJAS.citas}!A2:J`
+    range: `${HOJAS.citas}!A2:L`
   });
   const rows = res.data.values || [];
   return rows
@@ -207,26 +312,29 @@ async function getCitas() {
       creado:                row[6] || '',
       event_id:              row[7] || '',
       recordatorio_enviado:  row[8] || '',
-      cancelada_por_admin:   row[9] || ''
+      cancelada_por_admin:   row[9] || '',
+      profesional_id:        row[10] || '',
+      servicio_id:           row[11] || ''
     }));
 }
 
-async function agregarCita({ telefono, nombre, fecha, hora, eventId }) {
+async function agregarCita({ telefono, nombre, fecha, hora, eventId, profesionalId = '', servicioId = '' }) {
   const sheets  = await getSheetsClient();
   const citas   = await getCitas();
   const nuevoId = String(citas.length + 1).padStart(3, '0');
   await sheets.spreadsheets.values.append({
     spreadsheetId: SHEET_ID,
-    range: `${HOJAS.citas}!A:J`,
+    range: `${HOJAS.citas}!A:L`,
     valueInputOption: 'RAW',
     requestBody: {
       values: [[
         nuevoId, telefono, nombre, fecha, hora,
-        'confirmada', new Date().toISOString(), eventId || '', '', ''
+        'confirmada', new Date().toISOString(), eventId || '',
+        '', '', profesionalId, servicioId
       ]]
     }
   });
-  console.log(`✅ Cita agregada: ${nombre} | ${fecha} | ${hora} | ID: ${nuevoId}`);
+  console.log(`✅ Cita agregada: ${nombre} | ${fecha} | ${hora} | profesional: ${profesionalId}`);
   return nuevoId;
 }
 
@@ -251,7 +359,6 @@ async function marcarRecordatorioCitaEnviado(rowIndex) {
   console.log(`✅ Recordatorio marcado enviado en fila ${rowIndex}`);
 }
 
-// ─── MARCAR CANCELADA POR ADMIN (columna J de citas) ─────
 async function marcarCitaCanceladaAdmin(rowIndex) {
   const sheets = await getSheetsClient();
   await sheets.spreadsheets.values.update({
@@ -307,10 +414,13 @@ async function limpiarPendientes() {
 }
 
 module.exports = {
+  // clientes
   getClientes,
   getClienteByPhone,
   updateCliente,
   guardarLid,
+  guardarProfesionalOrigen,
+  guardarProfesionalPreferido,
   actualizarUltimoCorte,
   resetearCancelaciones,
   setProximoRecordatorio8Dias,
@@ -319,15 +429,30 @@ module.exports = {
   sumarCancelacion,
   sumarCitasCanceladasAdmin,
   sumarNoAsistio,
+  // profesionales
+  getProfesionales,
+  getProfesionalById,
+  getProfesionalesByTipo,
+  // servicios
+  getServicios,
+  getServicioById,
+  getServiciosByCategoria,
+  // productos
+  getProductos,
+  getProductosByCategoria,
+  // disponibilidad
   getDisponibilidad,
   guardarDisponibilidad,
+  // citas
   agregarCita,
   getCitas,
   updateEstadoCita,
   marcarRecordatorioCitaEnviado,
   marcarCitaCanceladaAdmin,
+  // pendientes
   getPendientes,
   agregarPendienteSheet,
   limpiarPendientes,
+  // utils
   normalizarTelefono
 };
