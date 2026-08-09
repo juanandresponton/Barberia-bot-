@@ -1,8 +1,7 @@
 require('dotenv').config();
 const { client, sendMessage, getChatIdMap } = require('./services/whatsapp');
 const { normalizarTelefono, getClienteByPhone } = require('./services/sheets');
-const { manejarBarbero, setBarberoStep } = require('./handlers/barbero');
-const { manejarCliente, clienteState }   = require('./handlers/cliente');
+const { manejarCliente, clienteState } = require('./handlers/cliente');
 const { manejarProfesional, preguntarDisponibilidadTodos } = require('./handlers/profesionales/index');
 const {
   enviarRecordatorioDiaAnterior,
@@ -13,28 +12,8 @@ const {
 } = require('./handlers/crons');
 const cron = require('node-cron');
 
-const BARBER_PHONE = process.env.BARBER_PHONE;
-const BARBER_LID   = process.env.BARBER_LID;
-
-let disponibilidadSemana  = { abre: null, viernes: false, sabado: false, domingo: false };
-function setDisponibilidad(val) { disponibilidadSemana = val; }
-
-let semanaActual          = null;
-let disponibilidadEnviada = false;
-
 const mensajesProcesados = new Map();
 const DEDUP_TTL = 5000;
-
-function getSemana() {
-  const hoy    = new Date();
-  const inicio = new Date(hoy.getFullYear(), 0, 1);
-  const semana = Math.ceil(((hoy - inicio) / 86400000 + inicio.getDay() + 1) / 7);
-  return `${hoy.getFullYear()}-S${semana}`;
-}
-
-function esBarbero(from) {
-  return from === `${BARBER_PHONE}@c.us` || from === BARBER_LID;
-}
 
 client.on('message', async (msg) => {
   if (msg.fromMe) return;
@@ -103,32 +82,26 @@ client.on('message', async (msg) => {
 
   console.log(`📩 Mensaje de ${from} | telefono: ${telefono} | body: ${body}`);
 
-  // ─── Admin general
-  if (esBarbero(from)) {
-    console.log(`✅ Reconocido como admin`);
-    await manejarBarbero(from, body, disponibilidadSemana, setDisponibilidad, clienteState);
-    return;
-  }
-
-  // ─── Profesional individual
-  const esProfesionalMsg = await manejarProfesional(from, body, disponibilidadSemana, setDisponibilidad, clienteState);
+  // ─── Profesional
+  const esProfesionalMsg = await manejarProfesional(from, body, disponibilidadSemana, null, clienteState);
   if (esProfesionalMsg) return;
 
   // ─── Cliente
   await manejarCliente(from, telefono, body, disponibilidadSemana, msg);
 });
 
+// Disponibilidad global (para mostrar días al cliente)
+let disponibilidadSemana = { viernes: false, sabado: false, domingo: false };
+
 function resetDisponibilidad() {
-  disponibilidadSemana  = { abre: null, viernes: false, sabado: false, domingo: false };
-  disponibilidadEnviada = false;
-  semanaActual          = null;
+  disponibilidadSemana = { viernes: false, sabado: false, domingo: false };
   console.log('🔄 Disponibilidad reseteada');
 }
 
 let whatsappListo = false;
 client.on('ready', () => { whatsappListo = true; console.log('✅ WhatsApp listo'); });
 
-// Disponibilidad todos los profesionales — PROD: jueves 9:20PM
+// Disponibilidad todos los profesionales — PROD: viernes 9:35PM
 cron.schedule('35 21 * * 5', async () => {
   if (!whatsappListo) return;
   console.log('⏰ Cron disponibilidad todos los profesionales...');
