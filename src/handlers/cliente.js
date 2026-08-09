@@ -415,7 +415,7 @@ async function mostrarGestionCita(from, telefono, nombre) {
     await sendMessage(from, `📅 No tienes ninguna cita agendada para este fin de semana. ✂️${VOLVER_MENU}`); return;
   }
 
-  clienteState[telefono] = { paso: 'gestion_cita', citaId: citaActiva.id, nombre };
+  clienteState[telefono] = { paso: 'gestion_cita', citaId: citaActiva.id, nombre, desdeCita: false };
   await sendMessage(from,
     `📅 *Tu próxima cita:*\n\n👤 *Nombre:* ${citaActiva.nombre}\n📅 *Día:* ${nombreDia(citaActiva.fecha)}\n⏰ *Hora:* ${citaActiva.hora}\n\n1) Reprogramar\n2) Cancelar\n3) Dejarla igual`
   );
