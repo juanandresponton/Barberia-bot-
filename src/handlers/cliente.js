@@ -376,7 +376,7 @@ async function manejarConfirmandoCita(from, telefono, body, state) {
       servicioId: state.servicio?.id || ''
     });
 
-    clienteState[telefono] = { paso: 'gestion_cita', citaId, nombre };
+    clienteState[telefono] = { paso: 'gestion_cita', citaId, nombre, desdeCita: true };
     await sendMessage(from,
       `🎉 ¡Tu cita quedó confirmada! ✅\n\n${state.servicio ? `✂️ *Servicio:* ${state.servicio.nombre}\n` : ''}${state.profesional ? `👤 *Profesional:* ${state.profesional.nombre}\n` : ''}📅 *${state.dia}*\n⏰ *${state.hora}*\n\n1) Cancelar esta cita\n2) Volver al menú`
     );
