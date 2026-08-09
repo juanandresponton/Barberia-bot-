@@ -1,16 +1,23 @@
 const { sendMessage } = require('../../../services/whatsapp');
 const { guardarDisponibilidadProfesional } = require('../../../services/sheets');
 
-const ID     = 'BARB_001';
+const ID    = 'BARB_001';
 const NOMBRE = 'Carlos Prueba';
-const PHONE  = process.env.PROF_PHONE_BARB_001;
+const PHONE  = process.env.PROF_PHONE_BARB_001 || '';
+const LID    = process.env.PROF_LID_BARB_001 || '';
 const profState = {};
 
 function esProfesional(from) {
-  return from === `${PHONE}@c.us` || from === `${PHONE}@lid`;
+  const phone   = PHONE.replace(/\D/g, '');
+  const fromNum = from.replace('@c.us', '').replace('@lid', '').replace(/\D/g, '');
+  return from === `${PHONE}@c.us` ||
+         from === `${PHONE}@lid`  ||
+         from === LID             ||
+         (phone && fromNum === phone);
 }
 
 async function preguntarDisponibilidad() {
+  if (!PHONE) return;
   profState[ID] = { paso: 'abre' };
   await sendMessage(`${PHONE}@c.us`,
     `✂️ ¡Hola *${NOMBRE}*! ¿Vas a trabajar este *fin de semana*?\n\n1) Sí, voy a trabajar\n2) No, este fin descanso\n\n_Responde con el número de tu opción_`
@@ -27,18 +34,13 @@ async function manejarMensaje(from, body) {
   const state = profState[ID] || { paso: null };
   console.log(`🔧 ${NOMBRE} paso: ${state.paso} | body: ${body}`);
 
-  if (body.toLowerCase() === 'menu') {
-    profState[ID] = { paso: 'menu_prof' };
-    await mostrarMenu(from);
-    return;
-  }
+  if (body.toLowerCase() === 'menu') { profState[ID] = { paso: 'menu_prof' }; await mostrarMenu(from); return; }
 
   if (state.paso === 'menu_prof') {
     if (body === '1') { await sendMessage(from, `📅 Próximamente: ver citas de hoy.`); profState[ID] = { paso: null }; return; }
     if (body === '2') { await sendMessage(from, `📅 Próximamente: ver citas del fin de semana.`); profState[ID] = { paso: null }; return; }
     if (body === '3') { profState[ID] = { paso: 'abre' }; await sendMessage(from, `📅 ¿Vas a trabajar este *fin de semana*?\n\n1) Sí\n2) No`); return; }
-    await mostrarMenu(from);
-    return;
+    await mostrarMenu(from); return;
   }
 
   if (state.paso === 'abre') {
