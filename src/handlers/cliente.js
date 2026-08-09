@@ -422,17 +422,39 @@ async function mostrarGestionCita(from, telefono, nombre) {
 }
 
 async function manejarGestionCita(from, telefono, body, state) {
+  console.log(`🔍 gestion_cita | body: ${body} | desdeCita: ${state.desdeCita}`);
+
+  // Viene de confirmación de cita: 1=cancelar, 2=volver al menú
+  if (state.desdeCita) {
+    if (body === '1') {
+      clienteState[telefono] = { ...state, paso: 'confirmando_cancelacion_final' };
+      await sendMessage(from, `⚠️ ¿Seguro que deseas cancelar?\n\n1) Sí\n2) No, mantener`);
+      return;
+    }
+    if (body === '2') {
+      clienteState[telefono] = { paso: 'menu_principal', nombre: state.nombre };
+      await mostrarMenu(from, state.nombre);
+      return;
+    }
+    await sendMessage(from, `⚠️ Responde *1* para cancelar o *2* para volver al menú.`);
+    return;
+  }
+
+  // Viene de "Ver/cambiar mi cita": 1=reprogramar, 2=cancelar, 3=dejar igual
   if (body === '1') {
     clienteState[telefono] = { ...state, paso: 'eligiendo_dia', reprogramando: true, dias: [] };
-    await sendMessage(from, `📅 Vamos a buscar un nuevo horario. Escribe *menu* para cancelar.`); return;
+    await sendMessage(from, `📅 Vamos a buscar un nuevo horario. Escribe *menu* para cancelar.`);
+    return;
   }
   if (body === '2') {
     clienteState[telefono] = { ...state, paso: 'confirmando_cancelacion_final' };
-    await sendMessage(from, `⚠️ ¿Seguro que deseas cancelar?\n\n1) Sí\n2) No, mantener`); return;
+    await sendMessage(from, `⚠️ ¿Seguro que deseas cancelar?\n\n1) Sí\n2) No, mantener`);
+    return;
   }
   if (body === '3') {
     clienteState[telefono] = { paso: 'menu_principal', nombre: state.nombre };
-    await mostrarMenu(from, state.nombre); return;
+    await mostrarMenu(from, state.nombre);
+    return;
   }
   await sendMessage(from, `⚠️ Responde *1* reprogramar, *2* cancelar o *3* dejarla igual.`);
 }
