@@ -251,22 +251,24 @@ async function getProductosByCategoria(categoria) {
   return productos.filter(p => p.categoria === categoria && p.activo);
 }
 
-// ─── DISPONIBILIDAD ──────────────────────────────────────
+// ─── DISPONIBILIDAD GENERAL (admin) ──────────────────────
 async function getDisponibilidad() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${HOJAS.disponibilidad}!A2:E`
+    range: `${HOJAS.disponibilidad}!A2:F`
   });
   const rows = res.data.values || [];
   if (rows.length === 0) return null;
-  const last = rows[rows.length - 1];
+  // Buscar filas sin profesional_id (disponibilidad general del admin)
+  const general = [...rows].reverse().find(row => !row[1] || row[1] === '');
+  if (!general) return null;
   return {
-    fecha:       last[0] || '',
-    viernes:     last[1] === 'TRUE',
-    sabado:      last[2] === 'TRUE',
-    domingo:     last[3] === 'TRUE',
-    actualizado: last[4] || ''
+    fecha:       general[0] || '',
+    viernes:     general[2] === 'TRUE',
+    sabado:      general[3] === 'TRUE',
+    domingo:     general[4] === 'TRUE',
+    actualizado: general[5] || ''
   };
 }
 
@@ -275,11 +277,11 @@ async function guardarDisponibilidad({ viernes = false, sabado, domingo }) {
   const fecha  = new Date().toISOString().split('T')[0];
   await sheets.spreadsheets.values.append({
     spreadsheetId: SHEET_ID,
-    range: `${HOJAS.disponibilidad}!A:E`,
+    range: `${HOJAS.disponibilidad}!A:F`,
     valueInputOption: 'RAW',
     requestBody: {
       values: [[
-        fecha,
+        fecha, '',
         viernes ? 'TRUE' : 'FALSE',
         sabado  ? 'TRUE' : 'FALSE',
         domingo ? 'TRUE' : 'FALSE',
@@ -287,7 +289,64 @@ async function guardarDisponibilidad({ viernes = false, sabado, domingo }) {
       ]]
     }
   });
-  console.log(`✅ Disponibilidad guardada: viernes=${viernes} sábado=${sabado} domingo=${domingo}`);
+  console.log(`✅ Disponibilidad general guardada: v=${viernes} s=${sabado} d=${domingo}`);
+}
+
+// ─── DISPONIBILIDAD POR PROFESIONAL ──────────────────────
+async function guardarDisponibilidadProfesional({ profesionalId, viernes = false, sabado, domingo }) {
+  const sheets = await getSheetsClient();
+  const fecha  = new Date().toISOString().split('T')[0];
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SHEET_ID,
+    range: `${HOJAS.disponibilidad}!A:F`,
+    valueInputOption: 'RAW',
+    requestBody: {
+      values: [[
+        fecha,
+        profesionalId,
+        viernes ? 'TRUE' : 'FALSE',
+        sabado  ? 'TRUE' : 'FALSE',
+        domingo ? 'TRUE' : 'FALSE',
+        new Date().toISOString()
+      ]]
+    }
+  });
+  console.log(`✅ Disponibilidad guardada: ${profesionalId} | v=${viernes} s=${sabado} d=${domingo}`);
+}
+
+async function getDisponibilidadProfesional(profesionalId) {
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${HOJAS.disponibilidad}!A2:F`
+  });
+  const rows = res.data.values || [];
+
+  const hoy = new Date();
+  const inicioSemana = new Date(hoy);
+  inicioSemana.setDate(hoy.getDate() - hoy.getDay());
+  const fechaSemana = inicioSemana.toISOString().split('T')[0];
+
+  const fila = [...rows].reverse().find(row =>
+    row[1] === profesionalId && row[0] >= fechaSemana
+  );
+
+  if (!fila) return { viernes: false, sabado: false, domingo: false };
+  return {
+    viernes: fila[2] === 'TRUE',
+    sabado:  fila[3] === 'TRUE',
+    domingo: fila[4] === 'TRUE'
+  };
+}
+
+async function getProfesionalesDisponibles(tipo, dia) {
+  const profesionales = await getProfesionalesByTipo(tipo);
+  const disponibles = [];
+  for (const prof of profesionales) {
+    const disp = await getDisponibilidadProfesional(prof.id);
+    if (disp[dia]) disponibles.push(prof);
+  }
+  return disponibles;
 }
 
 // ─── CITAS ───────────────────────────────────────────────
@@ -433,6 +492,7 @@ module.exports = {
   getProfesionales,
   getProfesionalById,
   getProfesionalesByTipo,
+  getProfesionalesDisponibles,
   // servicios
   getServicios,
   getServicioById,
@@ -443,6 +503,8 @@ module.exports = {
   // disponibilidad
   getDisponibilidad,
   guardarDisponibilidad,
+  guardarDisponibilidadProfesional,
+  getDisponibilidadProfesional,
   // citas
   agregarCita,
   getCitas,
