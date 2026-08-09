@@ -6,7 +6,7 @@ const auth = new google.auth.GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/calendar']
 });
 
-const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
+const CALENDAR_ID_DEFAULT = process.env.GOOGLE_CALENDAR_ID;
 
 const SLOTS_TODOS = [
   { label: '8:00 AM',  hour: 8,  minute: 0 },
@@ -31,14 +31,13 @@ function horaEnColombia(dateTime) {
   return { hour: bogota.getHours(), minute: bogota.getMinutes() };
 }
 
-async function getSlotsDisponibles(fecha) {
+async function getSlotsDisponibles(fecha, calendarId = CALENDAR_ID_DEFAULT) {
   const calendar = await getCalendarClient();
-
   const inicio = new Date(`${fecha}T00:00:00-05:00`);
   const fin    = new Date(`${fecha}T23:59:59-05:00`);
 
   const res = await calendar.events.list({
-    calendarId: CALENDAR_ID,
+    calendarId,
     timeMin: inicio.toISOString(),
     timeMax: fin.toISOString(),
     singleEvents: true,
@@ -72,7 +71,7 @@ async function getSlotsDisponibles(fecha) {
   return disponibles.map(s => s.label);
 }
 
-async function crearCita({ nombre, telefono, fecha, hora }) {
+async function crearCita({ nombre, telefono, fecha, hora, calendarId = CALENDAR_ID_DEFAULT }) {
   const calendar = await getCalendarClient();
 
   const [time, period] = hora.split(' ');
@@ -84,7 +83,7 @@ async function crearCita({ nombre, telefono, fecha, hora }) {
   const fin    = new Date(inicio.getTime() + 60 * 60 * 1000);
 
   const evento = await calendar.events.insert({
-    calendarId: CALENDAR_ID,
+    calendarId,
     requestBody: {
       summary: `✂️ ${nombre}`,
       description: `Teléfono: ${telefono}`,
@@ -93,17 +92,14 @@ async function crearCita({ nombre, telefono, fecha, hora }) {
     }
   });
 
-  console.log(`✅ Cita creada en Calendar: ${nombre} ${fecha} ${hora}`);
+  console.log(`✅ Cita creada: ${nombre} ${fecha} ${hora}`);
   return evento.data.id;
 }
 
-async function cancelarCita(eventId) {
+async function cancelarCita(eventId, calendarId = CALENDAR_ID_DEFAULT) {
   const calendar = await getCalendarClient();
-  await calendar.events.delete({
-    calendarId: CALENDAR_ID,
-    eventId
-  });
-  console.log(`🗑️ Cita cancelada en Calendar: ${eventId}`);
+  await calendar.events.delete({ calendarId, eventId });
+  console.log(`🗑️ Cita cancelada: ${eventId}`);
 }
 
 module.exports = { getSlotsDisponibles, crearCita, cancelarCita };
