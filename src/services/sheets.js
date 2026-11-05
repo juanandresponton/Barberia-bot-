@@ -2,7 +2,7 @@ const { google } = require('googleapis');
 const path = require('path');
 
 const auth = new google.auth.GoogleAuth({
-  keyFile: path.join(__dirname, '../config/barber-bot.json'),
+  keyFile: process.env.GOOGLE_CREDENTIALS_PATH || path.join(__dirname, '../config/barber-bot.json'),
   scopes: [
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/calendar'
@@ -31,6 +31,13 @@ function normalizarTelefono(telefono) {
   if (num.startsWith('0')) num = '57' + num.slice(1);
   if (num.startsWith('3') && num.length === 10) num = '57' + num;
   return num;
+}
+
+// Fecha YYYY-MM-DD en hora Colombia (toISOString usa UTC y después de las 7PM ya es el día siguiente)
+function fechaColombia(offsetDias = 0) {
+  const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+  d.setDate(d.getDate() + offsetDias);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 // ─── CLIENTES ────────────────────────────────────────────
@@ -108,14 +115,12 @@ async function guardarProfesionalPreferido(rowIndex, profesionalId) {
 }
 
 async function actualizarUltimoCorte(rowIndex, frecuencia) {
-  const hoy    = new Date();
-  const proximo = new Date(hoy);
-  const dias   = parseInt(String(frecuencia).replace(/\D/g, '')) || 15;
-  proximo.setDate(hoy.getDate() + dias);
-  await updateCliente(rowIndex, 'F', hoy.toISOString().split('T')[0]);
-  await updateCliente(rowIndex, 'G', proximo.toISOString().split('T')[0]);
+  const dias    = parseInt(String(frecuencia).replace(/\D/g, '')) || 15;
+  const proximo = fechaColombia(dias);
+  await updateCliente(rowIndex, 'F', fechaColombia());
+  await updateCliente(rowIndex, 'G', proximo);
   await updateCliente(rowIndex, 'H', 'activo');
-  console.log(`✅ Último corte actualizado | próximo: ${proximo.toISOString().split('T')[0]}`);
+  console.log(`✅ Último corte actualizado | próximo: ${proximo}`);
 }
 
 async function resetearCancelaciones(rowIndex) {
@@ -124,9 +129,7 @@ async function resetearCancelaciones(rowIndex) {
 }
 
 async function setProximoRecordatorio8Dias(rowIndex) {
-  const fecha = new Date();
-  fecha.setDate(fecha.getDate() + 8);
-  await updateCliente(rowIndex, 'G', fecha.toISOString().split('T')[0]);
+  await updateCliente(rowIndex, 'G', fechaColombia(8));
   console.log(`📅 Próximo recordatorio en 8 días`);
 }
 
@@ -142,6 +145,22 @@ async function borrarCliente(rowIndex) {
     range: `${HOJAS.clientes}!A${rowIndex}:M${rowIndex}`
   });
   console.log(`🗑️ Cliente borrado de fila ${rowIndex}`);
+}
+
+async function agregarCliente({ nombre, telefono, frecuencia = '', proximoRecordatorio = '', whatsappLid = '', profesionalId = '' }) {
+  const sheets = await getSheetsClient();
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SHEET_ID,
+    range: `${HOJAS.clientes}!A:M`,
+    valueInputOption: 'RAW',
+    requestBody: {
+      values: [[
+        new Date().toISOString(), nombre, telefono, '', frecuencia, '',
+        proximoRecordatorio, 'activo', '0', whatsappLid, '0', profesionalId, profesionalId
+      ]]
+    }
+  });
+  console.log(`✅ Cliente registrado: ${nombre} (${telefono}) | profesional: ${profesionalId}`);
 }
 
 async function sumarCancelacion(rowIndex, vecesCancelo) {
@@ -274,7 +293,7 @@ async function getDisponibilidad() {
 
 async function guardarDisponibilidad({ viernes = false, sabado, domingo }) {
   const sheets = await getSheetsClient();
-  const fecha  = new Date().toISOString().split('T')[0];
+  const fecha  = fechaColombia();
   await sheets.spreadsheets.values.append({
     spreadsheetId: SHEET_ID,
     range: `${HOJAS.disponibilidad}!A:F`,
@@ -295,7 +314,7 @@ async function guardarDisponibilidad({ viernes = false, sabado, domingo }) {
 // ─── DISPONIBILIDAD POR PROFESIONAL ──────────────────────
 async function guardarDisponibilidadProfesional({ profesionalId, viernes = false, sabado, domingo }) {
   const sheets = await getSheetsClient();
-  const fecha  = new Date().toISOString().split('T')[0];
+  const fecha  = fechaColombia();
   await sheets.spreadsheets.values.append({
     spreadsheetId: SHEET_ID,
     range: `${HOJAS.disponibilidad}!A:F`,
@@ -322,10 +341,9 @@ async function getDisponibilidadProfesional(profesionalId) {
   });
   const rows = res.data.values || [];
 
-  const hoy = new Date();
-  const inicioSemana = new Date(hoy);
-  inicioSemana.setDate(hoy.getDate() - hoy.getDay());
-  const fechaSemana = inicioSemana.toISOString().split('T')[0];
+  // La semana arranca el lunes, así el domingo todavía cuenta lo que respondieron el viernes
+  const diaSemana   = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' })).getDay();
+  const fechaSemana = fechaColombia(-((diaSemana + 6) % 7));
 
   const fila = [...rows].reverse().find(row =>
     row[1] === profesionalId && row[0] >= fechaSemana
@@ -485,6 +503,7 @@ module.exports = {
   setProximoRecordatorio8Dias,
   marcarClienteInactivo,
   borrarCliente,
+  agregarCliente,
   sumarCancelacion,
   sumarCitasCanceladasAdmin,
   sumarNoAsistio,
@@ -516,5 +535,6 @@ module.exports = {
   agregarPendienteSheet,
   limpiarPendientes,
   // utils
-  normalizarTelefono
+  normalizarTelefono,
+  fechaColombia
 };

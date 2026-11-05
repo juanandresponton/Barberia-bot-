@@ -2,7 +2,7 @@ const { google } = require('googleapis');
 const path = require('path');
 
 const auth = new google.auth.GoogleAuth({
-  keyFile: path.join(__dirname, '../config/barber-bot.json'),
+  keyFile: process.env.GOOGLE_CREDENTIALS_PATH || path.join(__dirname, '../config/barber-bot.json'),
   scopes: ['https://www.googleapis.com/auth/calendar']
 });
 
@@ -31,7 +31,8 @@ function horaEnColombia(dateTime) {
   return { hour: bogota.getHours(), minute: bogota.getMinutes() };
 }
 
-async function getSlotsDisponibles(fecha, calendarId = CALENDAR_ID_DEFAULT) {
+async function getSlotsDisponibles(fecha, calendarId) {
+  calendarId = calendarId || CALENDAR_ID_DEFAULT;
   const calendar = await getCalendarClient();
   const inicio = new Date(`${fecha}T00:00:00-05:00`);
   const fin    = new Date(`${fecha}T23:59:59-05:00`);
@@ -71,7 +72,8 @@ async function getSlotsDisponibles(fecha, calendarId = CALENDAR_ID_DEFAULT) {
   return disponibles.map(s => s.label);
 }
 
-async function crearCita({ nombre, telefono, fecha, hora, calendarId = CALENDAR_ID_DEFAULT }) {
+async function crearCita({ nombre, telefono, fecha, hora, calendarId }) {
+  calendarId = calendarId || CALENDAR_ID_DEFAULT;
   const calendar = await getCalendarClient();
 
   const [time, period] = hora.split(' ');
@@ -96,7 +98,8 @@ async function crearCita({ nombre, telefono, fecha, hora, calendarId = CALENDAR_
   return evento.data.id;
 }
 
-async function cancelarCita(eventId, calendarId = CALENDAR_ID_DEFAULT) {
+async function cancelarCita(eventId, calendarId) {
+  calendarId = calendarId || CALENDAR_ID_DEFAULT;
   const calendar = await getCalendarClient();
   await calendar.events.delete({ calendarId, eventId });
   console.log(`🗑️ Cita cancelada: ${eventId}`);

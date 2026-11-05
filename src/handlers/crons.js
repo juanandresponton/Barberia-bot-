@@ -3,7 +3,7 @@ const {
   getPendientes, limpiarPendientes, getCitas,
   getClientes, getClienteByPhone, updateEstadoCita,
   sumarNoAsistio, guardarDisponibilidad, guardarLid,
-  marcarRecordatorioCitaEnviado
+  marcarRecordatorioCitaEnviado, fechaColombia
 } = require('../services/sheets');
 const { getSlotsDisponibles } = require('../services/calendar');
 
@@ -88,9 +88,7 @@ async function notificarPendientesNoAbre(clienteState) {
 }
 
 async function enviarRecordatorioDiaAnterior(clienteState) {
-  const manana = new Date();
-  manana.setDate(manana.getDate() + 1);
-  const fechaManana = manana.toISOString().split('T')[0];
+  const fechaManana = fechaColombia(1);
   const citas = await getCitas();
   const citasManana = citas.filter(c => c.fecha === fechaManana && c.estado === 'confirmada');
   console.log(`📅 Recordatorios día anterior: ${citasManana.length} citas`);

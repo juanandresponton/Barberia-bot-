@@ -5,3 +5,4 @@ node_modules/
 *.log
 .DS_Store
 src/config/barber-bot.json
+.cache/
