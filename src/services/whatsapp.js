@@ -1,11 +1,12 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const { setQR, setEstado } = require('./web');
 
 const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-first-run', '--no-zygote']
   }
 });
 
@@ -15,15 +16,18 @@ const chatIdMap = {};
 client.on('qr', (qr) => {
   console.log('📱 Escanea este QR con WhatsApp:');
   qrcode.generate(qr, { small: true });
+  setQR(qr);
 });
 
 client.on('ready', () => {
   clientReady = true;
+  setEstado('conectado');
   console.log('✅ WhatsApp conectado y listo');
 });
 
 client.on('disconnected', (reason) => {
   clientReady = false;
+  setEstado('desconectado');
   console.warn('⚠️ WhatsApp desconectado:', reason);
 });
 
