@@ -6,3 +6,4 @@ node_modules/
 .DS_Store
 src/config/barber-bot.json
 .cache/
+chrome-cache/

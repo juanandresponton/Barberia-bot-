@@ -1,6 +1,6 @@
 const { join } = require('path');
 
-// Guarda Chrome dentro del proyecto para que Render lo encuentre en runtime
+// Guarda Chrome dentro del proyecto (carpeta sin punto) para que Render lo incluya en el build
 module.exports = {
-  cacheDirectory: join(__dirname, '.cache', 'puppeteer'),
+  cacheDirectory: join(__dirname, 'chrome-cache'),
 };
