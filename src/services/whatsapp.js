@@ -5,8 +5,13 @@ const { setQR, setEstado } = require('./web');
 const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-first-run', '--no-zygote']
+    // 'shell' = chrome-headless-shell, mucho más liviano (Render free tiene 512 MB)
+    headless: process.env.RENDER ? 'shell' : true,
+    args: [
+      '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu',
+      '--no-first-run', '--no-zygote', '--single-process', '--disable-extensions',
+      '--renderer-process-limit=1', '--js-flags=--max-old-space-size=256'
+    ]
   }
 });
 
