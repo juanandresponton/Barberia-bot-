@@ -25,7 +25,8 @@ client.on('message', async (msg) => {
   const tiempoMensaje = msg.timestamp * 1000;
   if (ahora - tiempoMensaje > 30000) { console.log(`⏭️ Mensaje viejo ignorado`); return; }
 
-  const deduKey = `${msg.body}_${msg.timestamp}`;
+  // Incluir el remitente: dos clientes que escriben "1" en el mismo segundo no son duplicados
+  const deduKey = msg.id?._serialized || `${msg.from}_${msg.body}_${msg.timestamp}`;
   if (mensajesProcesados.has(deduKey)) { console.log('⏭️ Duplicado ignorado'); return; }
   mensajesProcesados.set(deduKey, ahora);
   for (const [k, t] of mensajesProcesados.entries()) {

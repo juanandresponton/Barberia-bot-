@@ -169,11 +169,11 @@ async function marcarNoAsistidos() {
   const fechaAyer = `${ayer.getFullYear()}-${String(ayer.getMonth()+1).padStart(2,'0')}-${String(ayer.getDate()).padStart(2,'0')}`;
   const citas = await getCitas();
   const citasAyer = citas.filter(c => c.fecha === fechaAyer && c.estado === 'confirmada');
+  // Siguen "confirmada" solo porque no respondieron el recordatorio de 15 min:
+  // no sabemos si fueron o no, así que no se marcan como no_asistio
   for (const cita of citasAyer) {
-    await updateEstadoCita(cita.rowIndex, 'no_asistio');
-    const cliente = await getClienteByPhone(cita.telefono);
-    if (cliente) await sumarNoAsistio(cliente.rowIndex);
-    console.log(`❌ Marcado no asistió: ${cita.nombre} | ${cita.fecha}`);
+    await updateEstadoCita(cita.rowIndex, 'sin_confirmar');
+    console.log(`❔ Marcado sin confirmar asistencia: ${cita.nombre} | ${cita.fecha}`);
   }
 }
 

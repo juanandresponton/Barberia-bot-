@@ -9,7 +9,8 @@ const {
   getServicios, getServiciosByCategoria, getServicioById,
   getProductos, getProductosByCategoria,
   guardarProfesionalOrigen, guardarProfesionalPreferido,
-  getDisponibilidadProfesional
+  getDisponibilidadProfesional, getProfesionalById,
+  agregarCliente, fechaColombia
 } = require('../services/sheets');
 const { getSlotsDisponibles, crearCita, cancelarCita } = require('../services/calendar');
 const { getFechaProximoDia, primerNombre } = require('./crons');
@@ -18,6 +19,19 @@ const clienteState = {};
 
 const VOLVER_MENU = `\n\n─────────────\nEscribe *menu* para volver al menú 🙌`;
 const NUMERO_ASESOR = process.env.NUMERO_ASESOR || '';
+
+// Borra el evento del calendario del profesional de la cita (no del calendario general)
+async function cancelarEventoCita(cita) {
+  if (!cita?.event_id) return;
+  try {
+    const prof = cita.profesional_id ? await getProfesionalById(cita.profesional_id) : null;
+    await cancelarCita(cita.event_id, prof?.calendar_id);
+  } catch (e) { console.error(`❌ Error borrando evento ${cita.event_id}:`, e.message); }
+}
+
+async function notificarAsesor(telefono, nombre) {
+  if (NUMERO_ASESOR) await sendMessage(`${NUMERO_ASESOR}@c.us`, `📢 Cliente *${nombre || telefono}* (${telefono}) solicita asesor.`);
+}
 
 function nombreDia(fecha) {
   const d = new Date(fecha + 'T12:00:00-05:00');
@@ -74,12 +88,15 @@ async function manejarCliente(from, telefono, body, disponibilidadSemana, msg) {
   if (state.paso === 'confirmando_cita')              { await manejarConfirmandoCita(from, telefono, body, state); return; }
   if (state.paso === 'gestion_cita')                  { await manejarGestionCita(from, telefono, body, state); return; }
   if (state.paso === 'confirmando_cancelacion_final') { await manejarConfirmacionFinalCancelacion(from, telefono, body, state); return; }
+  if (state.paso === 'confirmando_cancelacion')       { await manejarRespuestaDiaAnterior(from, telefono, body, state); return; }
   if (state.paso === 'recordatorio_15min')            { await manejarRespuestaRecordatorio(from, telefono, body, state); return; }
   if (state.paso === 'recordatorio_frecuencia')       { await manejarRespuestaFrecuencia(from, telefono, body, state); return; }
   if (state.paso === 'reagendando_por_admin')         { await manejarReagendadoPorAdmin(from, telefono, body, state); return; }
   if (state.paso === 'viendo_productos')              { await manejarProductos(from, telefono, body, state); return; }
+  if (state.paso === 'productos_post')                { await manejarProductosPost(from, telefono, body, state); return; }
+  if (state.paso === 'registro_qr_nombre')            { await manejarNombreQR(from, telefono, body, state); return; }
   if (state.paso === 'registro_qr_frecuencia')        { await manejarFrecuenciaQR(from, telefono, body, state); return; }
-  if (state.paso === 'registro_qr_consentimiento')    { await manejarConsentimientoQR(from, telefono, body, state); return; }
+  if (state.paso === 'registro_qr_consentimiento')    { await manejarConsentimientoQR(from, telefono, body, state, msg); return; }
   if (state.paso === 'confirmar_preferido_qr')        { await manejarConfirmarPreferidoQR(from, telefono, body, state); return; }
 
   if (cliente && cliente.estado === 'inactivo') {
@@ -103,7 +120,7 @@ async function manejarRegistroQR(from, telefono, profesionalId, cliente) {
     await sendMessage(from, `👋 ¡Hola *${primerNombre(cliente.nombre)}*! Ya estás registrado.\n\n¿Dejamos a *${profesional.nombre}* como tu profesional preferido?\n\n1) Sí\n2) No`);
     return;
   }
-  clienteState[telefono] = { paso: 'registro_qr_frecuencia', profesionalId, profesionalNombre: profesional.nombre };
+  clienteState[telefono] = { paso: 'registro_qr_nombre', profesionalId, profesionalNombre: profesional.nombre };
   await sendMessage(from, `👋 ¡Hola! Bienvenido a *Saviac Estilo*.\n\nLlegaste desde el registro de *${profesional.nombre}*. ¿Me confirmas tu nombre?`);
 }
 
@@ -114,15 +131,44 @@ async function manejarConfirmarPreferidoQR(from, telefono, body, state) {
   await mostrarMenu(from, state.nombre);
 }
 
+async function manejarNombreQR(from, telefono, body, state) {
+  const nombre = body.trim();
+  if (nombre.length < 2) { await sendMessage(from, `⚠️ Escríbeme tu nombre, por favor.`); return; }
+  clienteState[telefono] = { ...state, paso: 'registro_qr_frecuencia', nombre };
+  await sendMessage(from, `¡Gracias, *${primerNombre(nombre)}*! ¿Cada cuánto sueles venir?\n\n1) Cada 7 días\n2) Cada 15 días\n3) Cada 21 días\n4) Cada 30 días\n5) Otro\n6) Lo defino después\n\n_Responde con el número de tu opción_`);
+}
+
 async function manejarFrecuenciaQR(from, telefono, body, state) {
   const frecuencias = { '1': '7', '2': '15', '3': '21', '4': '30', '5': 'otro', '6': 'despues' };
   clienteState[telefono] = { ...state, paso: 'registro_qr_consentimiento', frecuencia: frecuencias[body] || 'despues' };
   await sendMessage(from, `¿Deseas activar recordatorios automáticos?\n\n1) Sí\n2) No por ahora`);
 }
 
-async function manejarConsentimientoQR(from, telefono, body, state) {
+async function manejarConsentimientoQR(from, telefono, body, state, msg) {
   const profesionales = await getProfesionales();
   const profesional = profesionales.find(p => p.id === state.profesionalId);
+
+  // Si escribe desde un @lid, intentar guardar el número real
+  let telefonoReal = telefono;
+  if (from.includes('@lid') && msg) {
+    try {
+      const contact = await msg.getContact();
+      if (contact.number) telefonoReal = normalizarTelefono(contact.number);
+    } catch (e) { console.log(`⚠️ getContact falló: ${e.message}`); }
+  }
+
+  const dias = parseInt(state.frecuencia);
+  const yaExiste = await getClienteByPhone(telefonoReal);
+  if (!yaExiste) {
+    await agregarCliente({
+      nombre: state.nombre,
+      telefono: telefonoReal,
+      frecuencia: state.frecuencia || '',
+      proximoRecordatorio: body === '1' && dias ? fechaColombia(dias) : '',
+      whatsappLid: from,
+      profesionalId: state.profesionalId
+    });
+  }
   clienteState[telefono] = { paso: 'menu_principal', nombre: state.nombre, profesionalPreferido: state.profesionalId };
   await sendMessage(from, `✅ ¡Listo, *${primerNombre(state.nombre)}*! Registrado con *${profesional?.nombre || 'nuestro profesional'}*.\n\nEscribe *menu* para reservar. ✂️`);
 }
@@ -168,7 +214,7 @@ async function manejarMenuPrincipal(from, telefono, body, cliente, disponibilida
   if (body === '6') {
     clienteState[telefono] = { paso: null, nombre };
     await sendMessage(from, `👤 En breve un asesor de *Saviac Estilo* te contactará. ✂️${VOLVER_MENU}`);
-    if (NUMERO_ASESOR) await sendMessage(`${NUMERO_ASESOR}@c.us`, `📢 Cliente *${nombre || telefono}* (${telefono}) solicita asesor.`);
+    await notificarAsesor(telefono, nombre);
     return;
   }
   await mostrarMenu(from, nombre);
@@ -265,6 +311,9 @@ async function mostrarDiasDisponibles(from, telefono, state, dispParam) {
   if (dispParam?.viernes) dias.push({ label: 'Viernes', fecha: getFechaProximoDia(5) });
   if (dispParam?.sabado)  dias.push({ label: 'Sábado',  fecha: getFechaProximoDia(6) });
   if (dispParam?.domingo) dias.push({ label: 'Domingo', fecha: getFechaProximoDia(0) });
+  // Sábado/domingo: el viernes (y sábado) ya pasaron y getFechaProximoDia daría la otra semana
+  const finSemana = getFechaProximoDia(0);
+  for (let i = dias.length - 1; i >= 0; i--) if (dias[i].fecha > finSemana) dias.splice(i, 1);
 
   const calendarId = state.profesional?.calendar_id || null;
 
@@ -376,6 +425,14 @@ async function manejarConfirmandoCita(from, telefono, body, state) {
       servicioId: state.servicio?.id || ''
     });
 
+    if (state.reprogramando && state.citaAnteriorId) {
+      const citaAnterior = (await getCitas()).find(c => c.id === state.citaAnteriorId);
+      if (citaAnterior) {
+        await updateEstadoCita(citaAnterior.rowIndex, 'reprogramada');
+        await cancelarEventoCita(citaAnterior);
+      }
+    }
+
     clienteState[telefono] = { paso: 'gestion_cita', citaId, nombre, desdeCita: true };
     await sendMessage(from,
       `🎉 ¡Tu cita quedó confirmada! ✅\n\n${state.servicio ? `✂️ *Servicio:* ${state.servicio.nombre}\n` : ''}${state.profesional ? `👤 *Profesional:* ${state.profesional.nombre}\n` : ''}📅 *${state.dia}*\n⏰ *${state.hora}*\n\n1) Cancelar esta cita\n2) Volver al menú`
@@ -442,8 +499,19 @@ async function manejarGestionCita(from, telefono, body, state) {
 
   // Viene de "Ver/cambiar mi cita": 1=reprogramar, 2=cancelar, 3=dejar igual
   if (body === '1') {
-    clienteState[telefono] = { ...state, paso: 'eligiendo_dia', reprogramando: true, dias: [] };
-    await sendMessage(from, `📅 Vamos a buscar un nuevo horario. Escribe *menu* para cancelar.`);
+    const cita = (await getCitas()).find(c => c.id === state.citaId);
+    const profesional = cita?.profesional_id ? await getProfesionalById(cita.profesional_id) : null;
+    if (!profesional) {
+      clienteState[telefono] = { paso: 'menu_principal', nombre: state.nombre };
+      await sendMessage(from, `😔 No pude reprogramar esta cita automáticamente. Cancélala y agenda una nueva desde el menú. ✂️${VOLVER_MENU}`);
+      return;
+    }
+    const servicio = cita.servicio_id ? await getServicioById(cita.servicio_id) : null;
+    const dispProf = await getDisponibilidadProfesional(profesional.id);
+    const nuevoState = { paso: 'eligiendo_dia', nombre: state.nombre, profesional, servicio, reprogramando: true, citaAnteriorId: cita.id };
+    clienteState[telefono] = nuevoState;
+    await sendMessage(from, `📅 Vamos a buscar un nuevo horario con *${profesional.nombre}*. Escribe *menu* para cancelar.`);
+    await mostrarDiasDisponibles(from, telefono, nuevoState, dispProf);
     return;
   }
   if (body === '2') {
@@ -468,7 +536,9 @@ async function manejarProductos(from, telefono, body, state) {
 
   if (idx === opcionAsesor) {
     clienteState[telefono] = { paso: null, nombre };
-    await sendMessage(from, `👤 En breve un asesor te atenderá. ✂️${VOLVER_MENU}`); return;
+    await sendMessage(from, `👤 En breve un asesor te atenderá. ✂️${VOLVER_MENU}`);
+    await notificarAsesor(telefono, nombre);
+    return;
   }
 
   let productosAMostrar = idx === opcionTodos
@@ -481,8 +551,19 @@ async function manejarProductos(from, telefono, body, state) {
   productosAMostrar.forEach((p, i) => { msg += `${i+1}) *${p.nombre}*\n   $${p.precio.toLocaleString('es-CO')} — ${p.descripcion}\n\n`; });
   msg += `Para comprar habla con nuestro asesor.\n\n1) Hablar con asesor\n2) Volver al menú`;
 
-  clienteState[telefono] = { paso: 'menu_principal', nombre };
+  clienteState[telefono] = { paso: 'productos_post', nombre };
   await sendMessage(from, msg);
+}
+
+async function manejarProductosPost(from, telefono, body, state) {
+  if (body === '1') {
+    clienteState[telefono] = { paso: null, nombre: state.nombre };
+    await sendMessage(from, `👤 En breve un asesor te atenderá. ✂️${VOLVER_MENU}`);
+    await notificarAsesor(telefono, state.nombre);
+    return;
+  }
+  clienteState[telefono] = { paso: 'menu_principal', nombre: state.nombre };
+  await mostrarMenu(from, state.nombre);
 }
 
 // ─── CANCELACIÓN FINAL ───────────────────────────────────
@@ -494,7 +575,7 @@ async function manejarConfirmacionFinalCancelacion(from, telefono, body, state) 
 
     if (cita) {
       await updateEstadoCita(cita.rowIndex, 'cancelada');
-      if (cita.event_id) await cancelarCita(cita.event_id);
+      await cancelarEventoCita(cita);
     }
 
     if (cliente) {
@@ -524,6 +605,21 @@ async function manejarConfirmacionFinalCancelacion(from, telefono, body, state) 
   }
 }
 
+// ─── RECORDATORIO DÍA ANTERIOR ───────────────────────────
+async function manejarRespuestaDiaAnterior(from, telefono, body, state) {
+  if (body === '1') {
+    clienteState[telefono] = { paso: null };
+    await sendMessage(from, `✅ ¡Gracias por confirmar! Te esperamos mañana en *Saviac Estilo*. ✂️${VOLVER_MENU}`);
+    return;
+  }
+  if (body === '2') {
+    clienteState[telefono] = { ...state, paso: 'confirmando_cancelacion_final' };
+    await sendMessage(from, `⚠️ ¿Seguro que deseas cancelar?\n\n1) Sí\n2) No, mantener`);
+    return;
+  }
+  await sendMessage(from, `⚠️ Responde:\n\n1) Sí, confirmo asistencia\n2) Cancelar mi cita`);
+}
+
 // ─── RECORDATORIO 15 MIN ─────────────────────────────────
 async function manejarRespuestaRecordatorio(from, telefono, body, state) {
   const cliente = await getClienteByPhone(telefono);
@@ -539,7 +635,7 @@ async function manejarRespuestaRecordatorio(from, telefono, body, state) {
       if (cliente.frecuencia) await actualizarUltimoCorte(cliente.rowIndex, cliente.frecuencia);
     }
   } else if (body === '2') {
-    if (cita) { await updateEstadoCita(cita.rowIndex, 'cancelada'); if (cita.event_id) await cancelarCita(cita.event_id); }
+    if (cita) { await updateEstadoCita(cita.rowIndex, 'cancelada'); await cancelarEventoCita(cita); }
     if (cliente) {
       const nuevasCancelaciones = await sumarCancelacion(cliente.rowIndex, cliente.veces_cancelo);
       if (nuevasCancelaciones >= 3) { await borrarCliente(cliente.rowIndex); clienteState[telefono] = { paso: null }; await sendMessage(from, `😔 Cita cancelada. Tu registro fue *eliminado*. ✂️`); return; }
